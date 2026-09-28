@@ -1,8 +1,30 @@
-// Procedural dice audio. No sample files: every sound is synthesized with Web Audio,
-// modelled on real acrylic dice (hard, bright "clack" modes) landing on felt over wood
-// (soft low "thud"). Impacts are scheduled on the audio clock to match the roll animation.
+// Dice audio. Rolls use a real recording of dice shaken in the hand and thrown onto felt
+// (sounds/dice-on-felt.wav), cut into short pieces ("grains") that are replayed per die at the
+// exact moments the animation lands, so one die sounds like one die and five sound like five.
+// If the recording has not loaded (offline, blocked, still decoding) everything falls back to
+// synthesized sound. Scoring cues are always synthesized.
 
-let ctx = null, master = null, noise = null, enabled = false;
+let ctx = null, master = null, noise = null, enabled = false, sample = null, decoding = null;
+
+// Grain map of dice-on-felt.wav: [start s, length s, gain that brings the grain's peak to 1]
+const LAND_HARD = [[1.66, 0.09, 1.243], [1.7715, 0.0735, 2.207]];
+const LAND_MED = [[1.7525, 0.0195, 2.187], [1.7715, 0.0735, 2.207], [1.66, 0.09, 1.243]];
+const LAND_SOFT = [[1.847, 0.08, 19.691], [1.927, 0.068, 24.983]];
+const CLACKS = [[0.2399, 0.046, 1.122], [0.2949, 0.046, 1.351], [0.4027, 0.046, 1.945], [0.5492, 0.046, 1.265],
+  [0.6012, 0.0374, 2.147], [1.0056, 0.0296, 2.131], [1.0357, 0.046, 2.48], [1.1692, 0.046, 1.752], [1.2644, 0.0271, 2.373], [1.292, 0.046, 1.462]];
+const SHAKES = [[0.182, 0.32, 1.122], [0.295, 0.32, 1.265], [0.468, 0.32, 1.265], [0.744, 0.32, 2.131], [0.955, 0.32, 1.752], [1.006, 0.32, 1.462]];
+const GAIN = { land: 0.95, clack: 0.45, shake: 0.62 };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+// Start downloading the recording immediately; it is decoded once the audio context exists.
+const download = typeof fetch === 'function'
+  ? fetch(new URL('./sounds/dice-on-felt.wav', import.meta.url)).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+  : Promise.resolve(null);
+function decode() {
+  if (sample || decoding || !ctx) return;
+  decoding = download.then(buf => buf && new Promise((res, rej) => ctx.decodeAudioData(buf, res, rej)))
+    .then(b => { sample = b || null; }).catch(() => { sample = null; });
+}
 
 function init() {
   if (ctx) return ctx;
@@ -18,6 +40,7 @@ function init() {
   noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noise.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  decode();
   return ctx;
 }
 
@@ -58,8 +81,22 @@ function tone(t, dest, { freq, gain, decay, type = 'sine', attack = 0.0015, glid
   o.connect(g); g.connect(dest); o.start(t); o.stop(t + attack + decay + 0.02);
 }
 
+// Replay one piece of the recording. rate varies the pitch slightly so repeats never sound identical.
+function grain(t, [start, dur, norm], gain, pan, { rate = 0.94 + Math.random() * 0.12, len = dur, fadeIn = 0.001, fadeOut = 0.006 } = {}) {
+  const src = ctx.createBufferSource(); src.buffer = sample; src.playbackRate.value = rate;
+  const g = ctx.createGain(), peak = Math.max(0.0001, gain * norm), end = t + len / rate;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + fadeIn);
+  g.gain.setValueAtTime(peak, Math.max(t + fadeIn, end - fadeOut)); g.gain.linearRampToValueAtTime(0.0001, end);
+  src.connect(g); g.connect(out(pan)); src.start(t, start, len); src.stop(end + 0.01);
+}
+
 // One die hitting the table. strength 0..1, pan -1..1
 function impact(t, strength, pan) {
+  if (sample) {
+    const s = Math.max(0.05, Math.min(1, strength));
+    grain(t, pick(s >= 0.6 ? LAND_HARD : s >= 0.3 ? LAND_MED : LAND_SOFT), GAIN.land * Math.pow(s, 1.2), pan);
+    return;
+  }
   const dest = out(pan), s = Math.max(0.05, strength);
   // table body: felt-muffled wood thump
   tone(t, dest, { freq: 95 + Math.random() * 50, gain: 0.35 * s, decay: 0.05 + 0.03 * s, glide: 0.6 });
@@ -71,6 +108,7 @@ function impact(t, strength, pan) {
 }
 // Two dice knocking together (in the hand or on the table): no table thump, all click
 function clack(t, strength, pan) {
+  if (sample) { grain(t, pick(CLACKS), GAIN.clack * Math.max(0.05, strength), pan); return; }
   const dest = out(pan), s = Math.max(0.05, strength), f0 = 3000 + Math.random() * 1800;
   noiseBurst(t, dest, { freq: f0, q: 3.5, gain: 0.2 * s, decay: 0.008 + 0.006 * s });
   [1, 1.47, 2.09].forEach((m, i) => tone(t, dest, { freq: f0 * m, gain: (0.045 / (i + 1)) * s, decay: 0.015 + 0.012 * s }));
@@ -85,12 +123,22 @@ export function playRoll(events) {
   if (!enabled) return; const c = init(); if (!c) return;
   if (c.state === 'suspended') c.resume();
   const base = c.currentTime + 0.02;
+  // very first roll: the recording may still be decoding (a few ms); wait for it rather than
+  // playing the synthesized fallback, then keep every event on its original schedule
+  if (!sample && decoding) { decoding.then(() => schedule(events, base)); return; }
+  schedule(events, base);
+}
+function schedule(events, base) {
   for (const e of events) {
-    const t = base + e.t;
+    const t = Math.max(base + e.t, ctx.currentTime + 0.005);
     if (e.kind === 'impact') impact(t, e.s, e.pan);
     else if (e.kind === 'clack') clack(t, e.s, e.pan);
     else if (e.kind === 'slide') slide(t, e.dur || 0.08, e.s, e.pan);
-    else if (e.kind === 'rattle') {
+    else if (e.kind === 'rattle' && sample) {
+      // dice shaken in the hand: a slice of the recorded shake
+      const w = pick(SHAKES);
+      grain(t, w, GAIN.shake * e.s, 0, { len: Math.min(w[1], e.dur), fadeIn: 0.005, fadeOut: 0.09 });
+    } else if (e.kind === 'rattle') {
       // dice shaken in a loose fist: a dense, irregular cluster of clacks
       const n = Math.round(e.dur * 70 * (0.6 + e.s * 0.6));
       for (let i = 0; i < n; i++) clack(t + Math.random() * e.dur, 0.25 + Math.random() * 0.55 * e.s, (Math.random() - 0.5) * 0.5);

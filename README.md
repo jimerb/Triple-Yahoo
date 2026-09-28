@@ -11,8 +11,8 @@ Triple Yahoo! takes the classic five-dice game and triples it. Every category on
 **What you get**
 
 - **1 to 4 players** taking turns on one device, with a "pass the dice" pause between turns
-- **Real 3D dice** that are scooped up, shaken, thrown, bounce and settle, built in pure CSS with no libraries
-- **Synthesized sound**: dice rattle, felt-and-wood bounces, die-on-die clacks and scoring cues, all generated live (no audio files)
+- **Real 3D dice** with rounded edges and corners, lit as they tumble: scooped up, shaken, thrown, bounce and settle, built in pure CSS with no libraries
+- **Real dice-on-felt sound**: a recording of dice shaken and thrown onto felt, cut into individual hits that play exactly when each die lands, so one die sounds like one die and five sound like five. Scoring cues are synthesized
 - **Score hints**: after each roll, every box you could fill glows gold (brighter means more points) and boxes that would score zero get a dashed outline
 - **Bonus pace tracking**: ▲ and ▼ arrows show whether each upper-section box beat or missed "three of that number", with a running total per column
 - **Dark theme by default**, with a light theme one tap away
@@ -126,7 +126,8 @@ The rules come from `MANUAL.WRI` in the [original TYH20F.ZIP release](https://do
 | `app.mjs` | Game screen, saving, settings, full screen, top ten |
 | `engine.mjs` | Pure scoring and turn rules (no browser code) |
 | `dice3d.mjs` | 3D dice tray and throw animation |
-| `audio.mjs` | Synthesized sound effects |
+| `audio.mjs` | Dice sound (recorded hits) and synthesized scoring cues |
+| `sounds/dice-on-felt.wav` | Dice shake-and-throw recording used for roll sounds |
 | `server.mjs` | Minimal local web server with a fixed file allowlist |
 | `tests.mjs` | Rule tests |
 | `Start Game.cmd` | Windows one-click launcher |
@@ -147,5 +148,7 @@ Bug reports and ideas are welcome in [Issues](https://github.com/jimerb/Triple-Y
 ## Credits
 
 Triple Yahoo! was created by **Dan Puraty** and released as Windows shareware in 1993. This project is an independent, from-scratch reinterpretation made out of affection for the original. It contains none of the original program's code or artwork.
+
+Dice sound: a dice shake-and-roll recording supplied by the project owner (file tag: "Courtesy of Spidey"), trimmed and level-matched for the game.
 
 Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Manrope](https://fonts.google.com/specimen/Manrope) from Google Fonts. The game falls back to system fonts when offline.

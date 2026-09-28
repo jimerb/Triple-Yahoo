@@ -19,7 +19,13 @@
 - Full-screen button: enter, exit, F key and Esc all work; the layout is identical in and out of full screen.
 - Rule tests still pass.
 
+## Solid dice and recorded sound (2026-09-28)
+
+- Dice rebuilt as solid bodies: flat faces, 12 rounded edge strips and 8 rounded corner caps, with a hidden core. Checked close-ups at rest and at four points mid-throw at 1280×800 and 390×664: no see-through gaps at any angle. The 1 is now black like the other pips.
+- Roll sound rendered offline in headless Chromium through the real game code: the recording loads and is used on the very first roll (no fallback to synthesized sound). Loudest moment of a five-dice roll about -17 LUFS with peaks around -2 dBFS (no clipping); the old synthesized roll was about -22 LUFS and the raw recording -29 LUFS.
+- Rule tests still pass. No JavaScript errors.
+
 ## Not yet covered
 
 - Physical iOS and Android devices (layouts were checked in a desktop browser at phone sizes).
-- Sound runs without errors in automated testing but has not been judged by ear there.
+- Sound runs without errors and was measured for level in automated testing, but has not been judged by ear there.
