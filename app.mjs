@@ -8,10 +8,11 @@ const storage = {
   get(k, f) { try { return JSON.parse(localStorage.getItem(k)) ?? f; } catch { return f; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { $('#notice').classList.add('warn'); $('#notice').textContent = 'Browser storage is unavailable; this game will not be saved.'; } },
 };
-let game = storage.get('ty-game-v1', null), view = 0, busy = false, justRolled = false, fresh = null;
+let game = storage.get('ty-game-v1', null), view = 0, busy = false, justRolled = false, fresh = null, lastGain = null, lastProgress = null;
 if (!game?.players?.length || !game.players.every(p => p.card?.length === 13)) game = newGame(['Player 1']);
 view = game.active;
-const prefs = { hints: true, sound: true, animation: true, theme: 'dark', ...storage.get('ty-prefs-v1', {}) };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const prefs = { hints: true, sound: true, animation: true, countup: !reduceMotion, theme: 'dark', ...storage.get('ty-prefs-v1', {}) };
 const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const PAR = (ri, c) => 3 * (ri + 1) * (c + 1); // three of a number in every upper box = exactly 63 per column
 const HINT = ['', '', '', '', '', '', 'sum', 'sum', '25', '30', '40', '50', 'sum'];
@@ -23,7 +24,8 @@ function applyTheme() {
   document.querySelector('meta[name=theme-color]').content = prefs.theme === 'light' ? '#ece6da' : '#0a1310';
   $('#theme').setAttribute('aria-label', prefs.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
 }
-applyTheme(); soundOn(prefs.sound);
+function applyMotion() { document.documentElement.classList.toggle('no-countup', !prefs.countup); }
+applyTheme(); applyMotion(); soundOn(prefs.sound);
 
 const tray = createTray($('#stage'), {
   onToggle(i) {
@@ -33,22 +35,86 @@ const tray = createTray($('#stage'), {
 });
 const diceInteractive = () => !busy && !game.handoff && !game.done && game.rolls > 0 && game.rolls < 3;
 
+// ---------- count-up totals ----------
+// Any element with data-ck (a key) and data-to (the real value) shows a number that ticks up when the value rises.
+// Purely visual: the game state is already final, so nothing waits on it.
+const counts = new Map();
+let countRaf = 0;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+function paintCount(key, e) {
+  const txt = String(Math.round(e.shown));
+  document.querySelectorAll(`[data-ck="${key}"]`).forEach(el => { if (el.textContent !== txt) el.textContent = txt; el.classList.toggle('counting', !!e.t0); });
+}
+function countTick(now) {
+  countRaf = 0;
+  for (const [key, e] of counts) {
+    if (!e.t0) continue;
+    const t = Math.min(1, (now - e.t0) / e.dur);
+    e.shown = e.from + (e.to - e.from) * easeOut(t);
+    if (t >= 1) { e.shown = e.to; e.t0 = 0; }
+    paintCount(key, e);
+    if (e.t0 && !countRaf) countRaf = requestAnimationFrame(countTick);
+  }
+}
+function bump(el, gain) {
+  const host = el.parentElement; if (!host) return;
+  host.querySelector('.bump')?.remove();
+  const b = document.createElement('span'); b.className = 'bump'; b.setAttribute('aria-hidden', 'true'); b.textContent = '+' + gain;
+  b.addEventListener('animationend', () => b.remove()); setTimeout(() => b.remove(), 2000);
+  host.append(b);
+}
+function syncCounts(root = document) {
+  const seen = new Set();
+  root.querySelectorAll('[data-ck]').forEach(el => {
+    const key = el.dataset.ck, to = +el.dataset.to;
+    if (seen.has(key)) return; seen.add(key);
+    let e = counts.get(key);
+    if (!e) counts.set(key, e = { shown: to, from: to, to, t0: 0, dur: 0 });
+    else if (e.to !== to) {
+      if (to > e.to && prefs.countup) {
+        const gain = to - e.to;
+        Object.assign(e, { from: e.shown, to, t0: performance.now(), dur: Math.min(1600, 650 + (to - e.shown) * 5) });
+        root.querySelectorAll(`[data-ck="${key}"][data-bump]`).forEach(x => bump(x, gain));
+      } else Object.assign(e, { shown: to, from: to, to, t0: 0 });
+    }
+    paintCount(key, e);
+  });
+  if (!countRaf && [...counts.values()].some(e => e.t0)) countRaf = requestAnimationFrame(countTick);
+}
+function finishCounts() { for (const [key, e] of counts) { Object.assign(e, { shown: e.to, t0: 0 }); paintCount(key, e); } }
+const countEl = (key, value, tag = 'b', extra = '') => `<${tag} data-ck="${key}" data-to="${value}"${extra}>${value}</${tag}>`;
+
+// ---------- round progress bar ----------
+function renderProgress() {
+  const round = Math.min(game.turn, 39), boxes = game.players.length * 39;
+  const filled = game.players.reduce((a, pl) => a + pl.card.flat().filter(v => v !== null).length, 0);
+  const pct = game.done ? 1 : filled / boxes, bar = $('#roundbar');
+  document.querySelectorAll('#roundbar .rn').forEach(n => n.textContent = round);
+  if (lastProgress === null) { bar.classList.add('instant'); requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.remove('instant'))); }
+  bar.style.setProperty('--p', pct.toFixed(4));
+  bar.classList.toggle('full', pct >= 1);
+  bar.setAttribute('aria-valuenow', round);
+  bar.setAttribute('aria-valuetext', game.done ? 'Game complete' : `Round ${round} of 39`);
+  if (lastProgress !== null && pct > lastProgress && prefs.countup) { bar.classList.remove('glint'); void bar.offsetWidth; bar.classList.add('glint'); }
+  lastProgress = pct;
+}
+
 function render() {
   const p = game.players[view], t = totals(p.card);
   const canScore = view === game.active && game.rolls > 0 && !game.done && !busy && !game.handoff;
   $('#new').disabled = busy;
-  $('#round').textContent = Math.min(game.turn, 39);
+  renderProgress();
 
   // players
   $('#players').replaceChildren(...game.players.map((pl, i) => {
     const b = document.createElement('button'); b.type = 'button';
     b.className = 'player' + (i === game.active && !game.done ? ' active' : '') + (i === view && game.players.length > 1 ? ' viewing' : '');
-    b.innerHTML = `<span class="av">${esc(pl.name.trim()[0]?.toUpperCase() || '?')}</span><span>${esc(pl.name)}</span><b>${totals(pl.card).total}</b>`;
+    b.innerHTML = `<span class="av">${esc(pl.name.trim()[0]?.toUpperCase() || '?')}</span><span>${esc(pl.name)}</span>${countEl('p' + i, totals(pl.card).total)}`;
     b.setAttribute('aria-label', `${pl.name}, ${totals(pl.card).total} points${i === game.active ? ', rolling now' : ''}. Show scorecard.`);
     b.onclick = () => { view = i; render(); };
     return b;
   }));
-  $('#players').hidden = game.players.length < 2;
+  $('#players').classList.toggle('solo', game.players.length < 2); // solo chip shows only where the scorecard header can scroll away (phones)
 
   // table status
   const active = game.players[game.active].name, multi = game.players.length > 1;
@@ -70,7 +136,7 @@ function render() {
   const away = view !== game.active && !game.done;
   $('#cardlabel').textContent = away ? 'Viewing scorecard' : game.done ? 'Final scorecard' : 'Your scorecard';
   $('#cardlabel').classList.toggle('away', away);
-  $('#total').textContent = t.total;
+  Object.assign($('#total').dataset, { ck: 'p' + view, to: t.total });
 
   // potentials for the heat shading
   const pots = p.card.map((row, ri) => row.map((v, c) => v === null && canScore && prefs.hints ? score(game.dice, ri) * (c + 1) : null));
@@ -107,14 +173,16 @@ function render() {
         const pace = filled.reduce((a, [v, ri]) => a + v - PAR(ri, c), 0);
         const paceTxt = won || !filled.length ? '' : pace > 0 ? ` <span class="par up">▲${pace}</span>` : pace < 0 ? ` <span class="par down">▼${-pace}</span>` : ' <span class="par even">even</span>';
         const paceLbl = won || !filled.length ? '' : pace > 0 ? `, ${pace} ahead of pace` : pace < 0 ? `, ${-pace} behind pace` : ', on pace';
-        return `<div class="meter edge edge-b${won ? ' won' : ''}" role="cell" aria-label="Upper section ${c + 1}: ${t.upper[c]} of ${thr}${won ? ', bonus ' + t.bonus[c] + ' earned' : ', ' + (thr - t.upper[c]) + ' needed for +' + 35 * (c + 1)}${paceLbl}"><span class="lbl">${won ? '+' + t.bonus[c] + ' bonus' : t.upper[c] + ' / ' + thr + paceTxt}</span></div>`;
+        const newBonus = won && fresh?.bonus && fresh.p === view && fresh.c === c;
+        return `<div class="meter edge edge-b${won ? ' won' : ''}${newBonus ? ' fresh' : ''}" role="cell" aria-label="Upper section ${c + 1}: ${t.upper[c]} of ${thr}${won ? ', bonus ' + t.bonus[c] + ' earned' : ', ' + (thr - t.upper[c]) + ' needed for +' + 35 * (c + 1)}${paceLbl}"><span class="lbl">${won ? `<span>+${t.bonus[c]}</span><span class="bw"> bonus</span>` : `<span>${countEl(`p${view}u${c}`, t.upper[c], 'span')} / ${thr}</span>${paceTxt}`}</span></div>`;
       }).join('')}</div>`);
     }
   });
-  out.push(`<div class="row" role="row"><div class="tot cat edge" role="rowheader">Total</div>${t.columns.map(v => `<div class="tot edge" role="cell">${v}</div>`).join('')}</div>`);
+  out.push(`<div class="row" role="row"><div class="tot cat edge" role="rowheader">Total</div>${t.columns.map((v, c) => `<div class="tot edge" role="cell" aria-label="${['Single', 'Double', 'Triple'][c]} total ${v}">${countEl(`p${view}c${c}`, v, 'span')}</div>`).join('')}</div>`);
   sheet.innerHTML = out.join('');
   sheet.querySelectorAll('button.cell:not(:disabled)').forEach(b => b.onclick = () => takeScore(+b.dataset.r, +b.dataset.c));
   fresh = null;
+  syncCounts();
 }
 
 // ---------- dialogs ----------
@@ -132,8 +200,11 @@ function takeScore(r, c) {
 }
 function finishScore(r, c) {
   const previous = game.active, name = game.players[game.active].name, value = score(game.dice, r) * (c + 1);
+  const before = totals(game.players[previous].card);
   if (!commit(game, r, c)) return;
-  fresh = { p: previous, r, c };
+  const after = totals(game.players[previous].card);
+  fresh = { p: previous, r, c, bonus: after.bonus[c] > before.bonus[c] };
+  lastGain = { name, before: before.total, after: after.total };
   view = game.active;
   sfx(value === 0 ? 'zero' : r === 11 ? 'yahoo' : 'score');
   $('#notice').textContent = `${name} scored ${value} in ${categories[r]} ×${c + 1}.`;
@@ -149,7 +220,11 @@ function finishScore(r, c) {
 }
 function showHandoff() {
   if (!game.handoff) return;
-  modal(`<p class="eyebrow">Turn complete</p><h2>Pass the dice</h2><p id="handoffsummary"></p><button class="btn primary" id="nextplayer" type="button">${esc(game.players[game.active].name)}, roll ↗</button>`);
+  const prev = game.players[(game.active + game.players.length - 1) % game.players.length], now = totals(prev.card).total;
+  const from = lastGain && lastGain.name === prev.name && lastGain.after === now ? lastGain.before : now;
+  counts.set('handoff', { shown: from, from, to: from, t0: 0, dur: 0 });
+  modal(`<p class="eyebrow">Turn complete</p><h2>Pass the dice</h2><p id="handoffsummary"></p><div class="gain"><small>${esc(prev.name)}’s total</small><span class="gnum">${countEl('handoff', now, 'strong', ' data-bump')}</span></div><button class="btn primary" id="nextplayer" type="button">${esc(game.players[game.active].name)}, roll ↗</button>`);
+  syncCounts($('#dialogbody'));
   $('#handoffsummary').textContent = $('#notice').textContent + ' Next up: ' + game.players[game.active].name + '.';
   $('#nextplayer').onclick = () => { game.handoff = false; view = game.active; save(); $('#dialog').close(); sfx('turn'); render(); };
 }
@@ -158,7 +233,9 @@ $('#dialog').addEventListener('close', () => { if (game.handoff) setTimeout(show
 function showResults() {
   const ranked = game.players.slice().sort((a, b) => totals(b.card).total - totals(a.card).total), best = totals(ranked[0].card).total;
   const winners = ranked.filter(p => totals(p.card).total === best).map(p => p.name);
-  modal(`<p class="eyebrow">All 39 boxes filled</p><h2>${esc(winners.join(' & '))} win${winners.length === 1 ? 's' : ''}!</h2><ul class="results">${ranked.map(p => `<li class="${totals(p.card).total === best ? 'win' : ''}"><span>${esc(p.name)}</span><b>${totals(p.card).total}</b></li>`).join('')}</ul><p>Winning scores enter the local top ten.</p><button class="btn primary" id="again" type="button">Play again</button>`);
+  ranked.forEach((_, i) => counts.set('res' + i, { shown: 0, from: 0, to: 0, t0: 0, dur: 0 }));
+  modal(`<p class="eyebrow">All 39 boxes filled</p><h2>${esc(winners.join(' & '))} win${winners.length === 1 ? 's' : ''}!</h2><ul class="results">${ranked.map((p, i) => `<li class="${totals(p.card).total === best ? 'win' : ''}"><span>${esc(p.name)}</span>${countEl('res' + i, totals(p.card).total)}</li>`).join('')}</ul><p>Winning scores enter the local top ten.</p><button class="btn primary" id="again" type="button">Play again</button>`);
+  syncCounts($('#dialogbody'));
   $('#again').onclick = () => { $('#dialog').close(); openNewGame(); };
 }
 $('#rules').onclick = () => modal(`<p class="eyebrow">Original 1993 rules</p><h2>A little luck. A little strategy.</h2>
@@ -175,12 +252,13 @@ $('#settingsBtn').onclick = () => {
   modal(`<p class="eyebrow">Settings</p><h2>House rules</h2>
   ${row('sound', 'Sound', 'Dice rattle, bounce and scoring cues')}
   ${row('animation', 'Dice animation', 'Full 3D throw. Off = instant results')}
+  ${row('countup', 'Score count-up', 'Totals tick up after each score. Off = instant')}
   ${row('hints', 'Score hints', 'Shade every box this roll could fill')}
   <label class="toggle"><span><b>Light theme</b><small>Dark is the default</small></span><input type="checkbox" id="pref-light" ${prefs.theme === 'light' ? 'checked' : ''}></label>
   <div class="only-phone"><button class="btn" id="s-rules" type="button">How to play</button><button class="btn" id="s-leaders" type="button">High scores</button></div>`);
   $('#s-rules').onclick = () => $('#rules').click();
   $('#s-leaders').onclick = () => $('#leaders').click();
-  for (const id of ['sound', 'animation', 'hints']) $('#pref-' + id).onchange = e => { prefs[id] = e.target.checked; if (id === 'sound') { soundOn(prefs.sound); sfx('select'); } savePrefs(); render(); };
+  for (const id of ['sound', 'animation', 'countup', 'hints']) $('#pref-' + id).onchange = e => { prefs[id] = e.target.checked; if (id === 'sound') { soundOn(prefs.sound); sfx('select'); } if (id === 'countup') { applyMotion(); if (!prefs.countup) finishCounts(); } savePrefs(); render(); };
   $('#pref-light').onchange = e => { prefs.theme = e.target.checked ? 'light' : 'dark'; applyTheme(); savePrefs(); };
 };
 // ---------- full screen ----------

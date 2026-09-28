@@ -1,6 +1,8 @@
 # Triple Yahoo!
 
-**A modern browser remake of Dan Puraty's 1993 Windows shareware dice game.** Roll five dice, fill 39 boxes across three scoring columns, and chase the triple bonus. It plays on phones, tablets, laptops and desktops, needs no install beyond Node.js, and runs entirely on your own machine.
+**A modern browser remake of Dan Puraty's 1993 Windows shareware dice game.** Roll five dice, fill 39 boxes across three scoring columns, and chase the triple bonus. It plays on phones, tablets, laptops and desktops. Play it online with nothing to install, or run it on your own machine with Node.js.
+
+**▶ [Play Triple Yahoo! now](https://jimerb.github.io/Triple-Yahoo/)**
 
 ![Triple Yahoo! on a laptop: 3D dice on a green felt table beside the three-column scorecard](docs/screenshot.jpg)
 
@@ -14,12 +16,14 @@ Triple Yahoo! takes the classic five-dice game and triples it. Every category on
 - **Real 3D dice** with rounded edges and corners, lit as they tumble: scooped up, shaken, thrown, bounce and settle, built in pure CSS with no libraries
 - **Real dice-on-felt sound**: a recording of dice shaken and thrown onto felt, cut into individual hits that play exactly when each die lands, so one die sounds like one die and five sound like five. Scoring cues are synthesized
 - **Score hints**: after each roll, every box you could fill glows gold (brighter means more points) and boxes that would score zero get a dashed outline
+- **Scores that count up**: after each score your totals tick up to the new number, with a "+N" chip beside the grand total (never blocks your next roll, and can be switched off)
+- **Round progress bar** in the top bar that fills in brass as the 39 rounds go by
 - **Bonus pace tracking**: ▲ and ▼ arrows show whether each upper-section box beat or missed "three of that number", with a running total per column
 - **Dark theme by default**, with a light theme one tap away
 - **Full screen mode** with an obvious Exit button
 - **Automatic saving**: close the tab mid-game and pick up where you left off
 - **Local top ten** high-score table
-- **Works offline** and keeps everything in your browser: no accounts, no servers, no tracking
+- **Everything stays in your browser**: no accounts, no tracking, and the local version works offline
 
 | Desktop and tablet | Phone |
 | --- | --- |
@@ -103,7 +107,7 @@ The game is plain static files, so any web server works too. `server.mjs` is a t
 
 ## Settings
 
-Open Settings (the sliders icon) to switch **sound**, **dice animation**, **score hints** and the **light theme** on or off. Choices are remembered in your browser. The game also respects your device's reduced-motion setting.
+Open Settings (the sliders icon) to switch **sound**, **dice animation**, **score count-up**, **score hints** and the **light theme** on or off. Choices are remembered in your browser. The game also respects your device's reduced-motion setting: if it's on, score count-up starts switched off.
 
 On iPhone, Safari doesn't support full screen for web pages, so the full-screen button is hidden there. The phone's silent switch also mutes game sound.
 
