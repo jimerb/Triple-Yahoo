@@ -15,6 +15,8 @@ Triple Yahoo! takes the classic five-dice game and triples it. Every category on
 - **1 to 4 players** taking turns on one device, with a "pass the dice" pause between turns
 - **Real 3D dice** with rounded edges and corners, lit as they tumble: scooped up, shaken, thrown, bounce and settle, built in pure CSS with no libraries
 - **Real dice-on-felt sound**: a recording of dice shaken and thrown onto felt, cut into individual hits that play exactly when each die lands, so one die sounds like one die and five sound like five. Scoring cues are synthesized
+- **Yahoo! reward sound**: roll five of a kind while you still have an open Yahoo! box and a short celebration track plays as the dice land. It never holds up play (fades out the moment you roll again), and Settings lets you swap it for the simple chime
+- **Volume slider** in Settings, with a preview click when you let go
 - **Score hints**: after each roll, every box you could fill glows gold (brighter means more points) and boxes that would score zero get a dashed outline
 - **Scores that count up**: after each score your totals tick up to the new number, with a "+N" chip beside the grand total (never blocks your next roll, and can be switched off)
 - **Round progress bar** in the top bar that fills in brass as the 39 rounds go by
@@ -22,6 +24,7 @@ Triple Yahoo! takes the classic five-dice game and triples it. Every category on
 - **Dark theme by default**, with a light theme one tap away
 - **Full screen mode** with an obvious Exit button
 - **Automatic saving**: close the tab mid-game and pick up where you left off
+- **Remembers your name** (and who was at the table) in your browser, so New game is already filled in
 - **Local top ten** high-score table
 - **Everything stays in your browser**: no accounts, no tracking, and the local version works offline
 
@@ -78,7 +81,7 @@ Triple Yahoo! takes the classic five-dice game and triples it. Every category on
 | **F**, or the corner-arrows button | Enter or leave full screen |
 | **Esc**, or the gold **Exit full screen** button | Leave full screen |
 | **Tab** | Move between score boxes (Enter to score) |
-| **?** button | Full rules in the game |
+| **?** button | Full rules in the game, laid out for your screen: three columns on a desktop, tabs on a phone |
 
 ## Getting started
 
@@ -107,9 +110,11 @@ The game is plain static files, so any web server works too. `server.mjs` is a t
 
 ## Settings
 
-Open Settings (the sliders icon) to switch **sound**, **dice animation**, **score count-up**, **score hints** and the **light theme** on or off. Choices are remembered in your browser. The game also respects your device's reduced-motion setting: if it's on, score count-up starts switched off.
+Open Settings (the sliders icon) to switch **sound**, **dice animation**, **score count-up**, **score hints** and the **light theme** on or off. With sound on you also get a **volume** slider and a choice of **Yahoo! sound**: the **full reward** track (about 8 seconds) or the **simple chime**. Choices are remembered in your browser. The game also respects your device's reduced-motion setting: if it's on, score count-up starts switched off.
 
 On iPhone, Safari doesn't support full screen for web pages, so the full-screen button is hidden there. The phone's silent switch also mutes game sound.
+
+**Names are remembered per web address.** Browsers keep saved data separately for `127.0.0.1`, `localhost` and your computer's Wi-Fi address, so use the same address each time (on a phone, the Wi-Fi address changes if your router hands out a new one).
 
 ## Rules notes
 
@@ -127,11 +132,15 @@ The rules come from `MANUAL.WRI` in the [original TYH20F.ZIP release](https://do
 | --- | --- |
 | `index.html` | Page structure |
 | `style.css` | Layout for every screen size, dark and light themes |
-| `app.mjs` | Game screen, saving, settings, full screen, top ten |
+| `app.mjs` | Game screen, saving, settings, remembered names, full screen, top ten |
+| `help.mjs` | The How to Play screen (three layouts: desktop, tablet, phone) |
 | `engine.mjs` | Pure scoring and turn rules (no browser code) |
 | `dice3d.mjs` | 3D dice tray and throw animation |
-| `audio.mjs` | Dice sound (recorded hits) and synthesized scoring cues |
+| `audio.mjs` | Dice sound (recorded hits), synthesized scoring cues, volume, Yahoo! reward |
 | `sounds/dice-on-felt.wav` | Dice shake-and-throw recording used for roll sounds |
+| `sounds/yahoo-reward.m4a` | Yahoo! reward track the game plays (AAC, plays in every browser) |
+| `sounds/Yahoo!.m4a` | The original reward recording it was made from (not loaded by the game) |
+| `favicon.ico`, `favicon.svg`, `apple-touch-icon.png` | Browser tab icon and iPhone home-screen icon |
 | `server.mjs` | Minimal local web server with a fixed file allowlist |
 | `tests.mjs` | Rule tests |
 | `Start Game.cmd` | Windows one-click launcher |
@@ -154,5 +163,7 @@ Bug reports and ideas are welcome in [Issues](https://github.com/jimerb/Triple-Y
 Triple Yahoo! was created by **Dan Puraty** and released as Windows shareware in 1993. This project is an independent, from-scratch reinterpretation made out of affection for the original. It contains none of the original program's code or artwork.
 
 Dice sound: a dice shake-and-roll recording supplied by the project owner (file tag: "Courtesy of Spidey"), trimmed and level-matched for the game.
+
+Yahoo! reward sound: supplied by the project owner (file tag: "made with suno studio"), trimmed and re-encoded to AAC for the game.
 
 Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Manrope](https://fonts.google.com/specimen/Manrope) from Google Fonts. The game falls back to system fonts when offline.

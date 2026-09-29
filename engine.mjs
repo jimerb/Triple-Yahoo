@@ -28,3 +28,5 @@ export function commit(game,row,col) {
  if(game.active===0)game.turn++;
  game.rolls=0;game.selected.fill(true);return true;
 }
+// A five-of-a-kind is only worth celebrating if the player can still put it in a Yahoo! box (row 11, any column)
+export const hasOpenYahoo=player=>player.card[11].some(v=>v===null);

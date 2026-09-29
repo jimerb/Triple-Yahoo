@@ -3,8 +3,18 @@
 // exact moments the animation lands, so one die sounds like one die and five sound like five.
 // If the recording has not loaded (offline, blocked, still decoding) everything falls back to
 // synthesized sound. Scoring cues are always synthesized.
+// The Yahoo! reward is a ~8 s celebration track (sounds/yahoo-reward.m4a) that can be swapped for the
+// short synthesized chime in Settings. It is fetched once the page is idle, decoded off the main thread and
+// played from a buffer source, so nothing in the game ever waits for it.
 
 let ctx = null, master = null, noise = null, enabled = false, sample = null, decoding = null;
+let volume = 1, yahooMode = 'full', rewardBuf = null, rewardFetch = null, rewardDecoding = null, rewardVoice = null;
+
+// Loudness: master 0.9 at full volume. The slider is squared so the middle of the slider is about half as loud
+// to the ear, not half the amplitude. The reward track is mastered hot (-15.7 LUFS), so it is trimmed to 0.6,
+// which puts its loudest moment about level with the loudest dice hits and its intro and tail well below them.
+const MASTER = 0.9, REWARD_GAIN = 0.6;
+const level = v => MASTER * v * v;
 
 // Grain map of dice-on-felt.wav: [start s, length s, gain that brings the grain's peak to 1]
 const LAND_HARD = [[1.66, 0.09, 1.243], [1.7715, 0.0735, 2.207]];
@@ -22,8 +32,26 @@ const download = typeof fetch === 'function'
   : Promise.resolve(null);
 function decode() {
   if (sample || decoding || !ctx) return;
-  decoding = download.then(buf => buf && new Promise((res, rej) => ctx.decodeAudioData(buf, res, rej)))
+  decoding = download.then(buf => buf && new Promise((res, rej) => { const p = ctx.decodeAudioData(buf, res, rej); p?.catch?.(() => {}); }))
     .then(b => { sample = b || null; }).catch(() => { sample = null; });
+}
+
+// The reward track is fetched lazily (idle time, only while it is the selected Yahoo! sound and sound is on) so it
+// never competes with the first paint or the dice recording.
+function loadReward() {
+  if (rewardBuf || rewardDecoding) return;
+  if (!rewardFetch && typeof fetch === 'function') {
+    rewardFetch = fetch(new URL('./sounds/yahoo-reward.m4a', import.meta.url)).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  }
+  if (!rewardFetch || !ctx) return;
+  rewardDecoding = rewardFetch.then(buf => buf && new Promise((res, rej) => { const p = ctx.decodeAudioData(buf, res, rej); p?.catch?.(() => {}); }))
+    .then(b => { rewardBuf = b || null; }).catch(() => { rewardBuf = null; }).finally(() => { rewardDecoding = null; });
+}
+function wantReward() { return enabled && yahooMode === 'full'; }
+function prefetchReward() {
+  if (!wantReward() || rewardBuf || rewardFetch) return;
+  const go = () => { if (wantReward()) loadReward(); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 4000 }); else setTimeout(go, 1500);
 }
 
 function init() {
@@ -34,13 +62,14 @@ function init() {
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4;
   comp.attack.value = 0.002; comp.release.value = 0.12;
-  master = ctx.createGain(); master.gain.value = 0.9;
+  master = ctx.createGain(); master.gain.value = level(volume);
   master.connect(comp); comp.connect(ctx.destination);
   // 1 s of white noise, reused for every transient
   noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noise.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   decode();
+  if (wantReward()) loadReward();
   return ctx;
 }
 
@@ -53,7 +82,39 @@ export function unlock() {
   // play a silent buffer (required by older iOS WebKit)
   const b = c.createBufferSource(); b.buffer = c.createBuffer(1, 1, 22050); b.connect(master); b.start(0);
 }
-export function setEnabled(on) { enabled = !!on; if (on) unlock(); }
+export function setEnabled(on) {
+  enabled = !!on;
+  if (on) { unlock(); prefetchReward(); } else stopReward(0.05);
+}
+// 0..1. Ramped so dragging the slider never clicks.
+export function setVolume(v) {
+  volume = Math.max(0, Math.min(1, +v || 0));
+  if (master) master.gain.setTargetAtTime(level(volume), ctx.currentTime, 0.015);
+}
+// 'full' = the reward track, 'simple' = the short synthesized chime
+export function setYahooMode(mode) {
+  yahooMode = mode === 'simple' ? 'simple' : 'full';
+  if (yahooMode === 'full') { prefetchReward(); if (ctx) loadReward(); } else stopReward(0.05);
+}
+// Fade the reward out (used when the next roll starts, so it never fights the dice)
+export function stopReward(fade = 0.5) {
+  const v = rewardVoice; if (!v || !ctx) return; rewardVoice = null;
+  const t = ctx.currentTime;
+  try {
+    v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value, t);
+    v.g.gain.linearRampToValueAtTime(0.0001, t + fade); v.src.stop(t + fade + 0.02);
+  } catch {}
+}
+function playReward(t) {
+  if (!rewardBuf) { loadReward(); return false; }
+  stopReward(0.05);
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = rewardBuf; g.gain.value = REWARD_GAIN;
+  src.connect(g); g.connect(master); src.start(t);
+  const voice = { src, g }; rewardVoice = voice;
+  src.onended = () => { if (rewardVoice === voice) rewardVoice = null; g.disconnect(); };
+  return true;
+}
 export function now() { return ctx ? ctx.currentTime : 0; }
 
 function out(pan) {
@@ -159,6 +220,11 @@ export function sfx(name) {
   } else if (name === 'zero') {
     tone(t, master, { freq: 180, gain: 0.18, decay: 0.2, glide: 0.55 });
     noiseBurst(t, master, { type: 'lowpass', freq: 400, gain: 0.2, decay: 0.08 });
+  } else if (name === 'yahoo' && yahooMode === 'full' && playReward(t)) {
+    // the full reward is playing; nothing else to do
+  } else if (name === 'yahooScore') {
+    // Filling the Yahoo! box: the long reward already played when the dice landed, so only the short cues repeat
+    sfx(yahooMode === 'full' ? 'score' : 'yahoo');
   } else if (name === 'yahoo') {
     [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
       tone(t + i * 0.085, master, { freq: f, gain: 0.09, decay: 0.6, type: 'triangle' });

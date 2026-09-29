@@ -1,6 +1,7 @@
-import { categories, score, totals, newGame, roll, commit } from './engine.mjs';
+import { categories, score, totals, newGame, roll, commit, hasOpenYahoo } from './engine.mjs';
 import { createTray } from './dice3d.mjs';
-import { setEnabled as soundOn, unlock, sfx } from './audio.mjs';
+import { setEnabled as soundOn, setVolume, setYahooMode, stopReward, unlock, sfx } from './audio.mjs';
+import { helpHtml, wireHelp } from './help.mjs';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -9,10 +10,20 @@ const storage = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { $('#notice').classList.add('warn'); $('#notice').textContent = 'Browser storage is unavailable; this game will not be saved.'; } },
 };
 let game = storage.get('ty-game-v1', null), view = 0, busy = false, justRolled = false, fresh = null, lastGain = null, lastProgress = null;
-if (!game?.players?.length || !game.players.every(p => p.card?.length === 13)) game = newGame(['Player 1']);
+// Names are remembered separately from the saved game, so they survive even when the game itself is reset
+const roster = {
+  get() { const r = storage.get('ty-roster-v1', null); return { count: Math.min(4, Math.max(1, +r?.count || 1)), names: Array.isArray(r?.names) ? r.names.slice(0, 4).map(n => String(n ?? '').slice(0, 24)) : [] }; },
+  set(count, names) { storage.set('ty-roster-v1', { count, names }); },
+};
+if (!game?.players?.length || !game.players.every(p => p.card?.length === 13)) {
+  const r = roster.get();
+  game = newGame(Array.from({ length: r.count }, (_, i) => r.names[i]?.trim() || 'Player ' + (i + 1)));
+}
 view = game.active;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const prefs = { hints: true, sound: true, animation: true, countup: !reduceMotion, theme: 'dark', ...storage.get('ty-prefs-v1', {}) };
+const prefs = { hints: true, sound: true, volume: 1, yahoo: 'full', animation: true, countup: !reduceMotion, theme: 'dark', ...storage.get('ty-prefs-v1', {}) };
+prefs.volume = Math.min(1, Math.max(0, Number.isFinite(+prefs.volume) ? +prefs.volume : 1));
+if (prefs.yahoo !== 'simple') prefs.yahoo = 'full';
 const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const PAR = (ri, c) => 3 * (ri + 1) * (c + 1); // three of a number in every upper box = exactly 63 per column
 const HINT = ['', '', '', '', '', '', 'sum', 'sum', '25', '30', '40', '50', 'sum'];
@@ -25,7 +36,7 @@ function applyTheme() {
   $('#theme').setAttribute('aria-label', prefs.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
 }
 function applyMotion() { document.documentElement.classList.toggle('no-countup', !prefs.countup); }
-applyTheme(); applyMotion(); soundOn(prefs.sound);
+applyTheme(); applyMotion(); setVolume(prefs.volume); setYahooMode(prefs.yahoo); soundOn(prefs.sound);
 
 const tray = createTray($('#stage'), {
   onToggle(i) {
@@ -186,7 +197,7 @@ function render() {
 }
 
 // ---------- dialogs ----------
-function modal(html) { $('#dialogbody').innerHTML = html; if (!$('#dialog').open) $('#dialog').showModal(); }
+function modal(html, cls = '') { $('#dialog').className = cls; $('#dialogbody').innerHTML = html; if (!$('#dialog').open) $('#dialog').showModal(); }
 $('.close').onclick = () => $('#dialog').close();
 $('#dialog').addEventListener('click', e => { if (e.target === $('#dialog') && !game.handoff) $('#dialog').close(); });
 
@@ -206,7 +217,7 @@ function finishScore(r, c) {
   fresh = { p: previous, r, c, bonus: after.bonus[c] > before.bonus[c] };
   lastGain = { name, before: before.total, after: after.total };
   view = game.active;
-  sfx(value === 0 ? 'zero' : r === 11 ? 'yahoo' : 'score');
+  sfx(value === 0 ? 'zero' : r === 11 ? 'yahooScore' : 'score');
   $('#notice').textContent = `${name} scored ${value} in ${categories[r]} ×${c + 1}.`;
   if (game.done) {
     const top = storage.get('ty-high-v1', []), best = Math.max(...game.players.map(p => totals(p.card).total));
@@ -238,19 +249,31 @@ function showResults() {
   syncCounts($('#dialogbody'));
   $('#again').onclick = () => { $('#dialog').close(); openNewGame(); };
 }
-$('#rules').onclick = () => modal(`<p class="eyebrow">Original 1993 rules</p><h2>A little luck. A little strategy.</h2>
-<p>Each player fills 39 boxes: 13 categories across three columns. Roll five dice, tap any you want to throw again, and roll up to three times per turn. You can score after any roll.</p>
-<p>Pick one empty box. Columns multiply the score by 1, 2 or 3. Gold boxes show what this roll would score (brighter means more points), dashed boxes would score zero, and green boxes are already filled.</p>
-<ul><li><b>Ones to Sixes:</b> sum of matching dice. Reach 63 base points in a column for a 35 base bonus (35 / 70 / 105). Three of each number is exactly 63, so ▲ / ▼ on a scored box shows whether it beat or missed three of that number, and the bonus row shows the running total.</li><li><b>Three / four of a kind:</b> sum of all dice.</li><li><b>Full house:</b> a pair plus a triple, 25.</li><li><b>Small / large straight:</b> 4 / 5 in a row, 30 / 40.</li><li><b>Yahoo!:</b> five of a kind, 50.</li><li><b>Pot luck:</b> sum of all dice.</li></ul>
-<p>Keyboard: press <b>R</b> to roll, <b>1–5</b> to pick dice, <b>F</b> for full screen. Leave full screen with the <b>Exit full screen</b> button in the top bar or the <b>Esc</b> key.</p>`);
+$('#rules').onclick = () => { modal(helpHtml(), 'help-dlg'); wireHelp($('#dialogbody'), () => $('#dialog').close()); };
 $('#leaders').onclick = () => {
   const scores = storage.get('ty-high-v1', []);
   modal(`<p class="eyebrow">Local hall of fame</p><h2>Top ten</h2>${scores.length ? `<ul class="results">${scores.map((s, i) => `<li><span>${i + 1}. ${esc(s.name)} <small style="color:var(--faint)">${esc(s.date)}</small></span><b>${s.score}</b></li>`).join('')}</ul>` : '<p>Finish a game to set your first high score.</p>'}`);
 };
 $('#settingsBtn').onclick = () => {
   const row = (id, t, d) => `<label class="toggle"><span><b>${t}</b><small>${d}</small></span><input type="checkbox" id="pref-${id}" ${prefs[id] ? 'checked' : ''}></label>`;
+  const pct = Math.round(prefs.volume * 100);
   modal(`<p class="eyebrow">Settings</p><h2>House rules</h2>
   ${row('sound', 'Sound', 'Dice rattle, bounce and scoring cues')}
+  <div class="subset${prefs.sound ? '' : ' off'}" id="audioset">
+    <div class="vol">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/></svg>
+      <input type="range" class="slider" id="pref-volume" min="0" max="100" step="5" value="${pct}" style="--v:${pct}%" aria-label="Volume" ${prefs.sound ? '' : 'disabled'}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+      <output id="volout" for="pref-volume">${pct}%</output>
+    </div>
+    <div class="yset">
+      <div class="yhead"><span><b>Yahoo! sound</b><small>Plays when you roll five of a kind</small></span><button type="button" class="play" id="yplay" aria-label="Play the Yahoo! sound" title="Preview" ${prefs.sound ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button></div>
+      <div class="seg y" id="yseg" role="group" aria-label="Yahoo! sound">
+        <button type="button" data-y="full" aria-pressed="${prefs.yahoo === 'full'}" ${prefs.sound ? '' : 'disabled'}>Full reward</button>
+        <button type="button" data-y="simple" aria-pressed="${prefs.yahoo === 'simple'}" ${prefs.sound ? '' : 'disabled'}>Simple chime</button>
+      </div>
+    </div>
+  </div>
   ${row('animation', 'Dice animation', 'Full 3D throw. Off = instant results')}
   ${row('countup', 'Score count-up', 'Totals tick up after each score. Off = instant')}
   ${row('hints', 'Score hints', 'Shade every box this roll could fill')}
@@ -258,7 +281,26 @@ $('#settingsBtn').onclick = () => {
   <div class="only-phone"><button class="btn" id="s-rules" type="button">How to play</button><button class="btn" id="s-leaders" type="button">High scores</button></div>`);
   $('#s-rules').onclick = () => $('#rules').click();
   $('#s-leaders').onclick = () => $('#leaders').click();
-  for (const id of ['sound', 'animation', 'countup', 'hints']) $('#pref-' + id).onchange = e => { prefs[id] = e.target.checked; if (id === 'sound') { soundOn(prefs.sound); sfx('select'); } if (id === 'countup') { applyMotion(); if (!prefs.countup) finishCounts(); } savePrefs(); render(); };
+  const vol = $('#pref-volume'), audioControls = () => document.querySelectorAll('#audioset input, #audioset button');
+  const preview = () => { stopReward(0.05); sfx('yahoo'); };
+  $('#dialog').addEventListener('close', () => stopReward(0.25), { once: true }); // a preview should not outlive the dialog
+  $('#pref-sound').onchange = e => {
+    prefs.sound = e.target.checked; soundOn(prefs.sound); if (prefs.sound) sfx('select');
+    $('#audioset').classList.toggle('off', !prefs.sound); audioControls().forEach(x => { x.disabled = !prefs.sound; });
+    savePrefs();
+  };
+  vol.oninput = () => {
+    prefs.volume = vol.value / 100; setVolume(prefs.volume);
+    vol.style.setProperty('--v', vol.value + '%'); $('#volout').textContent = vol.value + '%';
+  };
+  vol.onchange = () => { savePrefs(); sfx('select'); }; // a click on release, so you can hear the new level
+  document.querySelectorAll('#yseg [data-y]').forEach(b => b.onclick = () => {
+    prefs.yahoo = b.dataset.y; setYahooMode(prefs.yahoo); savePrefs();
+    document.querySelectorAll('#yseg [data-y]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    preview();
+  });
+  $('#yplay').onclick = preview;
+  for (const id of ['animation', 'countup', 'hints']) $('#pref-' + id).onchange = e => { prefs[id] = e.target.checked; if (id === 'countup') { applyMotion(); if (!prefs.countup) finishCounts(); } savePrefs(); render(); };
   $('#pref-light').onchange = e => { prefs.theme = e.target.checked ? 'light' : 'dark'; applyTheme(); savePrefs(); };
 };
 // ---------- full screen ----------
@@ -285,7 +327,8 @@ if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
 
 $('#theme').onclick = () => { prefs.theme = prefs.theme === 'light' ? 'dark' : 'light'; applyTheme(); savePrefs(); };
 function openNewGame() {
-  let count = Math.min(4, game.players.length) || 1;
+  const saved = roster.get();
+  let count = saved.count;
   modal(`<p class="eyebrow">A fresh scorecard</p><h2>Who’s at the table?</h2><p>Starting replaces the current saved game.</p>
   <label class="field">Players</label><div class="seg" id="count">${[1, 2, 3, 4].map(n => `<button type="button" data-n="${n}">${n}</button>`).join('')}</div>
   <form id="setup"><div id="names"></div><button class="btn primary" type="submit">Start game ↗</button></form>`);
@@ -295,7 +338,7 @@ function openNewGame() {
     const prev = [...document.querySelectorAll('#names input')].map(x => x.value);
     $('#names').replaceChildren(...Array.from({ length: count }, (_, i) => {
       const input = document.createElement('input'); input.type = 'text'; input.maxLength = 24; input.placeholder = 'Player ' + (i + 1);
-      input.value = prev[i] ?? (/^Player \d$/.test(old[i] || '') ? '' : old[i] || ''); input.autocomplete = 'off';
+      input.value = prev[i] ?? (saved.names[i] || (/^Player \d$/.test(old[i] || '') ? '' : old[i] || '')); input.autocomplete = 'off';
       input.setAttribute('aria-label', 'Player ' + (i + 1) + ' name'); return input;
     }));
   };
@@ -303,8 +346,10 @@ function openNewGame() {
   draw();
   $('#setup').onsubmit = e => {
     e.preventDefault();
-    game = newGame([...$('#names').children].map((x, i) => x.value.trim() || 'Player ' + (i + 1)));
-    view = 0; save(); $('#notice').textContent = ''; $('#dialog').close(); sfx('turn'); render();
+    const typed = [...$('#names').children].map(x => x.value.trim());
+    roster.set(count, Array.from({ length: 4 }, (_, i) => i < count ? typed[i] : saved.names[i] || ''));
+    game = newGame(typed.map((n, i) => n || 'Player ' + (i + 1)));
+    stopReward(0.2); view = 0; save(); $('#notice').textContent = ''; $('#dialog').close(); sfx('turn'); render();
   };
 }
 $('#new').onclick = openNewGame;
@@ -316,10 +361,12 @@ async function doRoll() {
   if (!mask.some(Boolean)) return;
   unlock();
   if (!roll(game)) return;
+  stopReward(0.5); // never let the long Yahoo! track fight the dice
   busy = true; view = game.active; save(); render();
   await tray.roll(game.dice, mask, prefs.animation !== false);
   busy = false; justRolled = true;
-  if (game.dice.every(d => d === game.dice[0])) {
+  // Only celebrate when the Yahoo! can actually be scored: with all three Yahoo! boxes full it is just another roll
+  if (game.dice.every(d => d === game.dice[0]) && hasOpenYahoo(game.players[game.active])) {
     const b = $('#burst'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go'); sfx('yahoo');
   }
   render();

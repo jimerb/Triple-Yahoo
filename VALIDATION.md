@@ -29,7 +29,17 @@
 - Phones: the scorecard header scrolls out of view, so a single player now also gets the name-and-total chip in the docked dice tray, where the count-up stays visible.
 - Fixed: "+105 bonus" no longer clips on phones (the word "bonus" drops to a second line).
 
+## Polish pass (2026-09-29)
+
+- Favicon: `favicon.ico` holds 7 hand-tuned sizes (16 to 256 px, PNG frames), plus `favicon.svg` and a 180 px `apple-touch-icon.png`. Checked on dark and light tab colours at 16, 24, 32 and 48 px.
+- How to Play rebuilt as `help.mjs`. Checked in headless Chromium at 1920×1080, 1440×900 (fits with no scrolling), 1366×768, 1180×820, 1024×768, 820×1180, 390×844, 360×640, 320×568 and 844×390: no sideways overflow on any phone tab. Example point values come from the real scoring function.
+- Names: entered "Jim" and "Terry", reloaded, New game came back filled in with two players. Wiped the saved game and reloaded: a new game started with the remembered names.
+- Volume slider: 50% sets master gain to 0.225 (squared curve, 0.9 at 100%); saved and restored; disabled while sound is off.
+- Yahoo! reward: rolled a forced Yahoo with the full sound selected and saw the 9.7 s track start once; scoring the Yahoo box did not restart it; the next roll faded it out; Roll stayed enabled throughout. Simple mode never starts the track. The Settings preview stops when the dialog closes. Loudest moment measured about -15 LUFS momentary (dice: about -17), integrated about -21 LUFS.
+- Yahoo! celebration edge case: the burst and reward sound now fire only while the rolling player still has an open Yahoo! box (`hasOpenYahoo` in `engine.mjs`, with a rule test). Checked in the browser with a forced five-of-a-kind: celebrates with all three boxes open or one left open; stays silent with all three filled (including a 0), in solo and two-player games.
+- Rule tests still pass (5 of 5).
+
 ## Not yet covered
 
 - Physical iOS and Android devices (layouts were checked in a desktop browser at phone sizes).
-- Sound runs without errors and was measured for level in automated testing, but has not been judged by ear there.
+- Sound runs without errors and was measured for level in automated testing, but has not been judged by ear there. The reward level (0.6 of full scale) is a measured starting point; adjust `REWARD_GAIN` in `audio.mjs` if it feels too loud or quiet.
