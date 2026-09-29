@@ -57,7 +57,7 @@ function lightAt(p) {
 const overlay = ({ dark, spec }) => {
   const s = spec * 0.75, a = Math.min(1, dark + s), w = a ? s / a : 0;
   const mix = (hi, lo) => Math.round(hi * w + lo * (1 - w));
-  return `rgba(${mix(255, 28)},${mix(252, 20)},${mix(240, 9)},${a.toFixed(3)})`;
+  return `rgba(${mix(255, 28)},${mix(252, 20)},${mix(240, 9)},${a.toFixed(2)})`;
 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -134,15 +134,19 @@ export function createTray(stage, { onToggle } = {}) {
     d.shadow.style.transform = `translateZ(0.5px) scale(${1 + k * 0.6})`; d.shadow.style.opacity = String(0.6 - k);
     shade(d);
   }
-  // lighting: brightness of each face from its world-space normal
-  function shade(d, live) {
-    let W, C;
-    if (live) { W = new DOMMatrix(getComputedStyle(d.wrap).transform); C = new DOMMatrix(getComputedStyle(d.cube).transform); }
-    else { W = new DOMMatrix().rotate(0, 0, d.yaw); C = new DOMMatrix().rotate(d.rx, 0, 0).rotate(0, d.ry, 0); }
-    const M = W.multiply(C);
+  // lighting: brightness of each face from its world-space normal.
+  // mats: [wrapMatrix, cubeMatrix] read from the running animation (batched by the caller so the
+  // browser resolves styles once per frame). bevels=false skips the costly gradient repaints.
+  // Every write is skipped when the value did not change, so a still die costs nothing.
+  function shade(d, mats, bevels = true) {
+    const M = (mats ? mats[0] : new DOMMatrix().rotate(0, 0, d.yaw)).multiply(mats ? mats[1] : new DOMMatrix().rotate(d.rx, 0, 0).rotate(0, d.ry, 0));
     // table coordinates: CSS z is up out of the felt, y points toward the viewer
     const toWorld = n => { const p = M.transformPoint(new DOMPoint(n[0], n[1], n[2], 0)); return [p.x, p.y, p.z]; };
-    for (const f of Object.values(d.faces)) f.shade.style.opacity = lightAt(toWorld(f.n)).dark.toFixed(3);
+    for (const f of Object.values(d.faces)) {
+      const o = lightAt(toWorld(f.n)).dark.toFixed(2);
+      if (f.o !== o) { f.o = o; f.shade.style.opacity = o; }
+    }
+    if (!bevels) return;
     // rounded edges: sweep the normal from one face to the other across the strip
     for (const e of d.edges) {
       const a = toWorld(e.top), b = toWorld(e.bot), stops = [];
@@ -152,13 +156,16 @@ export function createTray(stage, { onToggle } = {}) {
         l.spec *= Math.sin(Math.PI * t); // no glint where the strip meets the flat faces, so the seam stays invisible
         stops.push(`${overlay(l)} ${(t * 100).toFixed(0)}%`);
       }
-      e.shade.style.background = `linear-gradient(to bottom,${stops.join(',')})`;
+      const bg = `linear-gradient(to bottom,${stops.join(',')})`;
+      if (e.bg !== bg) { e.bg = bg; e.shade.style.background = bg; }
     }
     for (const k of d.corners) {
       const c = k.ring.map(r => { const l = lightAt(toWorld(r.n)); if (r.vertex) l.spec = 0; return overlay(l); });
-      k.shade.style.background = `conic-gradient(from 30deg,${c.map((x, i) => `${x} ${i * 60}deg`).join(',')},${c[0]} 360deg)`;
+      const bg = `conic-gradient(from 30deg,${c.map((x, i) => `${x} ${i * 60}deg`).join(',')},${c[0]} 360deg)`;
+      if (k.bg !== bg) { k.bg = bg; k.shade.style.background = bg; }
     }
   }
+  const readMats = d => [new DOMMatrix(getComputedStyle(d.wrap).transform), new DOMMatrix(getComputedStyle(d.cube).transform)];
 
   function render(s) {
     state = s;
@@ -236,8 +243,18 @@ export function createTray(stage, { onToggle } = {}) {
     });
     if (idx.length > 1) for (let c = 0; c < Math.min(3, idx.length - 1); c++) events.push({ t: rnd(0.5, 0.8) * longest / 1000, kind: 'clack', s: rnd(0.3, 0.6), pan: rnd(-0.4, 0.4) });
     playRoll(events);
-    let raf;
-    const tick = () => { idx.forEach(i => shade(dice[i], true)); raf = requestAnimationFrame(tick); };
+    // Lighting loop. Faces update every frame (cheap opacity). The gradient-painted bevels update every
+    // 2nd frame, backing off to every 3rd/4th when the device is struggling to hold its frame rate.
+    let raf, frame = 0, last = 0, ema = 16.7;
+    const tick = t => {
+      if (last) ema += (Math.min(t - last, 100) - ema) * 0.15;
+      last = t;
+      const every = ema > 30 ? 4 : ema > 21 ? 3 : 2;
+      const bevels = frame++ % every === 0;
+      const mats = idx.map(i => readMats(dice[i])); // all reads first, then all writes
+      idx.forEach((i, n) => shade(dice[i], mats[n], bevels));
+      raf = requestAnimationFrame(tick);
+    };
     raf = requestAnimationFrame(tick);
     return Promise.all(anims.map(a => a.finished.catch(() => {}))).then(() => {
       cancelAnimationFrame(raf);

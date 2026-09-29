@@ -139,11 +139,13 @@ nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
 .stage { position: relative; flex: 1 1 auto; min-height: 118px; perspective: 1500px; perspective-origin: 50% 35%; container-type: size; }
 .table3d { position: absolute; left: 0; top: 0; transform-style: preserve-3d; transform: rotateX(32deg); transform-origin: 50% 50%; }
 .dwrap, .dlift, .cube { position: absolute; left: 0; top: 0; width: var(--s); height: var(--s); transform-style: preserve-3d; }
-.dlift, .cube { will-change: transform; }
+.dwrap, .dlift, .cube { will-change: transform; }
+.dshadow { will-change: transform, opacity; }
+.face .shade { will-change: opacity; }
 .dshadow {
   position: absolute; inset: -8%; border-radius: 30%;
   background: radial-gradient(closest-side, rgba(0, 0, 0, .75), rgba(0, 0, 0, .35) 60%, transparent);
-  filter: blur(4px); transform: translateZ(.5px);
+  transform: translateZ(.5px);
 }
 .dring { position: absolute; inset: -14%; border-radius: 28%; border: 2px solid transparent; transform: translateZ(1px); transition: border-color .2s, box-shadow .2s; }
 .dwrap.selected .dring { border-color: rgba(246, 213, 150, .95); box-shadow: 0 0 18px rgba(246, 205, 120, .6), inset 0 0 12px rgba(246, 205, 120, .35); }
