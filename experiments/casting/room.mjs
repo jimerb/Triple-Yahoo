@@ -62,6 +62,9 @@ export class TrialRooms {
       const mask = game.rolls === 0 ? [true, true, true, true, true] : [...game.selected];
       if (!roll(game, this.random)) throw new TrialError(409, 'Choose dice to reroll, or score this turn.');
       cue = { type: 'roll', mask };
+    } else if (data.type === 'select') {
+      if (!Array.isArray(data.selected) || data.selected.length !== 5 || data.selected.some(value => typeof value !== 'boolean') || !game.rolls || game.rolls >= 3 || game.done) throw new TrialError(400, 'Those dice cannot be selected now.');
+      game.selected = [...data.selected];
     } else if (data.type === 'toggle') {
       if (!Number.isInteger(data.die) || data.die < 0 || data.die > 4 || !game.rolls || game.rolls >= 3 || game.done) throw new TrialError(400, 'That die cannot be selected now.');
       game.selected[data.die] = !game.selected[data.die];

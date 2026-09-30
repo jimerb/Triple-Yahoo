@@ -64,7 +64,7 @@ test('HTTP assets, credential checks, silent reconnect snapshots and path allowl
   const server=createTrialServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const base=`http://127.0.0.1:${server.address().port}`;let stream;
   try{
-    for(const p of ['/','/receiver.html','/viewer.html','/screen.mjs','/engine.mjs','/sounds/dice-on-felt.wav'])assert.equal((await fetch(base+p)).status,200);
+    for(const p of ['/','/receiver.html','/viewer.html','/screen.mjs','/controller-state.mjs','/engine.mjs','/sounds/dice-on-felt.wav'])assert.equal((await fetch(base+p)).status,200);
     for(const p of ['/.git/config','/room.mjs','/server.mjs','/package.json'])assert.equal((await fetch(base+p)).status,404);
     const keys=await(await fetch(base+'/api/rooms',{method:'POST',body:JSON.stringify({names:['Jim','Terry']})})).json();
     const path=`/api/rooms/${keys.roomId}`;
@@ -73,4 +73,15 @@ test('HTTP assets, credential checks, silent reconnect snapshots and path allowl
     assert.equal((await fetch(base+path+'/action',{method:'POST',headers:{Origin:'https://another.example',Authorization:`Bearer ${keys.controlToken}`},body:'{}'})).status,403);
     stream=await fetch(base+path+'/events?ticket='+keys.viewToken);const reader=stream.body.getReader();const first=await reader.read();assert.match(new TextDecoder().decode(first.value),/^event: snapshot/);await reader.cancel();
   }finally{await stream?.body?.cancel().catch(()=>{});server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
+
+test('full selection masks validate access, turn timing and duplicate commands',()=>{
+  const f=fixture();const selected=[true,false,true,false,true];
+  assert.throws(()=>f.action({type:'select',selected}),/cannot be selected/);
+  f.action({type:'roll'});
+  for(const invalid of [[true],[true,true,true,true,1],'all'])assert.throws(()=>f.action({type:'select',selected:invalid}),/cannot be selected/);
+  for(const key of [f.keys.viewToken,f.keys.displayToken])assert.throws(()=>f.rooms.action(f.room,key,{type:'select',selected,id:'unauthorized',revision:f.room.revision}),/cannot access/);
+  const before=f.room.revision;f.action({type:'select',selected,id:'selection'});assert.deepEqual(f.room.game.selected,selected);assert.equal(f.room.revision,before+1);
+  f.action({type:'select',selected:Array(5).fill(false),id:'selection',revision:before});assert.deepEqual(f.room.game.selected,selected);assert.equal(f.room.revision,before+1);
 });

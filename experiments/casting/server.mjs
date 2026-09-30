@@ -6,7 +6,7 @@ import { TrialRooms, TrialError } from './room.mjs';
 const assets = {
   '/': 'controller.html', '/controller.html': 'controller.html', '/receiver.html': 'receiver.html',
   '/viewer.html': 'viewer.html', '/display-link.html': 'display-link.html', '/display-link.mjs': 'display-link.mjs',
-  '/trial.css': 'trial.css', '/controller.mjs': 'controller.mjs',
+  '/trial.css': 'trial.css', '/controller.mjs': 'controller.mjs', '/controller-state.mjs': 'controller-state.mjs',
   '/receiver.mjs': 'receiver.mjs', '/viewer.mjs': 'viewer.mjs', '/screen.mjs': 'screen.mjs',
   '/sound.mjs': 'sound.mjs', '/cast.mjs': 'cast.mjs', '/client.mjs': 'client.mjs', '/events.mjs': 'events.mjs',
   '/engine.mjs': '../../engine.mjs', '/sounds/dice-on-felt.wav': '../../sounds/dice-on-felt.wav',
@@ -18,7 +18,7 @@ async function body(req) {
 }
 export function createTrialServer({ rooms = new TrialRooms(), appId = process.env.CAST_APP_ID || '' } = {}) {
   const server = http.createServer(async (req, res) => {
-    res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Cache-Control', 'no-store, no-transform'); res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
     try {

@@ -1,6 +1,6 @@
 # Casting trial
 
-**Status: implemented and checked in desktop Chrome; actual Android-to-TV casting is not yet proven.**
+**Status: the actual Android phone launched the independent board on the registered Chromecast and scores updated. Dice pips, selection responsiveness and Cast labeling need a follow-up device check after the fixes below.**
 
 **For TV casting, use [the online casting trial](https://triple-yahoo-cast-trial.jimerb.chatgpt.site/).** It is hosted on OpenAI Sites, allows visitors without signing in, and has the registered Cast application configured. The local `127.0.0.1:4318` and home-network `192.168.1.81:4318` previews use separate rooms and remain for controller and board-preview checks. Their pages now link directly to the online trial instead of suggesting that Google registration is still missing. Start a new trial at the online address before casting.
 
@@ -60,13 +60,27 @@ node experiments/casting/cast-check.cjs
 | Sound ownership in the browser preview | Passed TV-ready handoff, transfer back to phone, no automatic reclaim, and separate watcher behavior. This is not a by-ear sound check. |
 | Layout | 390px phone and 1280×720 board passed; six long nicknames fit the TV board without overflow. |
 | Google SDK adapter test doubles | Passed app configuration, callback order, custom namespace, credential isolation, spare Android setup flow and different-room rejection. |
-| Real Android Chrome Cast button and TV selection | Not tested. |
-| Actual LG display compatibility, audible sounds and sleep/takeover | Not tested. |
+| Real Android Chrome Cast button and TV selection | User reached the custom board on the registered Chromecast; supplied phone and TV photos. |
+| Actual LG display compatibility, audible sounds and sleep/takeover | Board and score updates observed; dice pips failed in the first trial. Audio, sleep and takeover remain unverified. |
 | Public HTTPS test hosting | OpenAI Sites trial deployed; anonymous requests opened the controller and receiver pages successfully. |
 | Custom Cast application registration | Complete: application `12757F35`; the living-room casting puck shows Ready For Testing. |
 | Show on TV on the secure trial in desktop Chrome | Enabled; status says to select the display. Physical casting still awaits the device check. |
 
-Gameplay checks ran in a local Windows checkout of `multiplayer`, not the published cloud development environment. The public Sites endpoint and its configured Cast button were subsequently checked. The files and commands can be used in the cloud environment later. Physical Android casting and TV audio remain untested.
+Gameplay checks ran in a local Windows checkout of `multiplayer`, not the published cloud development environment. The public Sites endpoint and its configured Cast button were subsequently checked. The files and commands can be used in the cloud environment later. Physical Android board launch and score updates are now observed. TV audio and the remaining recovery checks are unverified.
+
+## First physical trial and follow-up fixes
+
+On September 30, the user cast from Android to the registered Chromecast and supplied photos of the independent shared board. Scores followed play correctly, but dice bodies had no pips, selection feedback took about four seconds, and the native Cast popup showed 127.0.0.1:4318 despite opening the hosted Site.
+
+The deployed receiver uses an older Chrome 90 browser. Dice now use explicit inline SVG circles inside ordinary block buttons, replacing CSS grid children inside native buttons. This removes the dice-face layout dependency implicated by the blank TV faces; the updated faces still need a physical recheck.
+
+The controller previously discarded action responses and waited for the event stream to repaint selections. It now shows selection intent immediately, coalesces rapid taps into complete selection masks, uses returned authoritative state for rolls and scores, retries stale selection revisions, and restores confirmed state on request failure. Roll and score controls wait for pending selections to be confirmed. Action acknowledgements and later stream echoes cannot play the same cue twice.
+
+Google registration was checked: the receiver URL points to the HTTPS Sites board, not localhost. The receiver now supplies an explicit Triple Yahoo application-state label. The exact source of the native localhost popup label is unconfirmed; stop the old Cast session and start a fresh one before evaluating this change.
+
+All 20 rule, Node trial and controller tests passed. The Sites service passed its 10 Worker/controller tests and artifact validation. Browser checks confirmed visible pips, rapid selections, matching independent board state and scoring to the next player. These checks do not establish physical TV rendering or latency after the update.
+
+For the follow-up, stop casting, refresh the hosted trial on the phone, and select Show on TV again. Check visible pips, immediate selection feedback and the native Cast label. The hosted game uses the Sites address; do not substitute the PC IP address in Google registration.
 
 ## Developer setup before the physical trial
 
@@ -74,7 +88,7 @@ Gameplay checks ran in a local Windows checkout of `multiplayer`, not the publis
 2. Register a **Custom Receiver** in the Google Cast Developer Console. Its URL is the hosted trial's `/receiver.html`; use the registered application ID as the server environment variable `CAST_APP_ID`. An empty ID disables Show on TV honestly, while board preview remains available. Never substitute Google's Default Media Receiver or a made-up application ID for the game board.
 3. Google requires a one-time, non-refundable **$5 developer account registration** if there is no account yet. Account terms/payment need the owner's authorization. Players do not need Google developer accounts or game passwords.
 4. For an unpublished receiver trial, register the actual Cast device in the developer console, wait until it is ready for testing, and restart it as Google instructs. This is a developer test step, not the intended household setup. Do not publish the receiver broadly just to avoid registering a test device.
-5. The confirmed test display is an LG TV with an attached Google Chromecast puck. The puck is registered and shows Ready For Testing; restart its power before the trial. No LG app installation or TV-model investigation is needed. Actual custom receiver loading, play and audio still need the physical checks below.
+5. The confirmed test display is an LG TV with an attached Google Chromecast puck. The puck is registered and shows Ready For Testing; restart its power before the trial. No LG app installation or TV-model investigation is needed. The custom board launched and scores updated. Rendering, responsiveness, audio and recovery still need the physical checks below.
 
 The Dockerfile can package this trial for a Node-compatible host, using the repository root as build context:
 

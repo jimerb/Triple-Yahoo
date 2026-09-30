@@ -90,10 +90,7 @@ a{color:var(--gold)}
   gap:8px;
   justify-content:center;
   margin:25px 0}
-.die{display:grid;
-  grid-template-columns:repeat(3,1fr);
-  grid-template-rows:repeat(3,1fr);
-  gap:3px;
+.die{display:block;
   padding:9px;
   width:54px;
   height:54px;
@@ -102,9 +99,11 @@ a{color:var(--gold)}
   background:#fff1d6;
   box-shadow:0 7px 0 #bbab8d;
   color:#1c3328}
-.pip{background:transparent;
-  border-radius:50%}
-.pip.on{background:#1c3328}
+.die-face{display:block;
+  width:100%;
+  height:100%;
+  pointer-events:none}
+.die{touch-action:manipulation}
 .die.selected{border-color:var(--gold);
   background:#fbd384;
   transform:translateY(-9px)}
@@ -164,8 +163,7 @@ tfoot th,tfoot td{font-weight:bold;
   height:7vw;
   max-width:100px;
   max-height:100px;
-  padding:1vw;
-  gap:.4vw}
+  padding:1vw}
 .display th,.display td{font-size:2.45vh;
   padding:.25vh}
 .display table{line-height:1.2}
