@@ -1,0 +1,212 @@
+:root{color-scheme:dark;
+  --ink:#fff5df;
+  --muted:#b6c4ba;
+  --gold:#efc477;
+  --line:#334e44;
+  --panel:#142b23}
+*{box-sizing:border-box}
+body{margin:0;
+  background:#091b15;
+  color:var(--ink);
+  font:17px/1.45 system-ui,sans-serif}
+header{padding:20px 5%;
+  display:flex;
+  align-items:center;
+  gap:18px;
+  border-bottom:1px solid var(--line)}
+header>a,header>strong{font:bold 27px Georgia,serif;
+  color:var(--gold);
+  text-decoration:none}
+.tag{border:1px solid var(--line);
+  border-radius:30px;
+  padding:5px 12px;
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.08em}
+main{max-width:1050px;
+  margin:auto;
+  padding:30px 5% 50px}
+h1,h2{font-family:Georgia,serif;
+  line-height:1.1}
+h1{font-size:clamp(30px,5vw,48px)}
+h2{font-size:30px;
+  margin:10px 0}
+p{color:var(--muted)}
+.panel{max-width:660px;
+  background:var(--panel);
+  padding:30px;
+  border:1px solid var(--line);
+  border-radius:22px}
+form{display:grid;
+  gap:14px}
+input{width:100%;
+  font:inherit;
+  padding:14px;
+  color:var(--ink);
+  background:#091b15;
+  border:1px solid var(--line);
+  border-radius:10px}
+small,.note{font-size:13px;
+  color:var(--muted)}
+button{font:600 16px system-ui,sans-serif;
+  min-height:46px;
+  padding:10px 15px;
+  border:1px solid #597063;
+  border-radius:10px;
+  background:#1c392c;
+  color:var(--ink);
+  cursor:pointer}
+button:disabled{opacity:.4;
+  cursor:default}
+button.primary{background:var(--gold);
+  color:#241b0c;
+  border:0}
+.toolbar{display:flex;
+  gap:10px;
+  flex-wrap:wrap}
+.toolbar button{display:flex;
+  align-items:center;
+  gap:9px}
+.status{margin:12px 0 4px;
+  font-size:14px}
+.links{display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  margin-top:16px}
+a{color:var(--gold)}
+.game-layout{display:grid;
+  grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);
+  gap:25px;
+  margin:25px 0}
+.felt,.card{background:var(--panel);
+  border-radius:18px;
+  padding:20px;
+  min-width:0}
+.eyebrow{font-size:12px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--gold)}
+.dice{display:flex;
+  gap:8px;
+  justify-content:center;
+  margin:25px 0}
+.die{display:grid;
+  grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(3,1fr);
+  gap:3px;
+  padding:9px;
+  width:54px;
+  height:54px;
+  min-height:0;
+  border:3px solid transparent;
+  background:#fff1d6;
+  box-shadow:0 7px 0 #bbab8d;
+  color:#1c3328}
+.pip{background:transparent;
+  border-radius:50%}
+.pip.on{background:#1c3328}
+.die.selected{border-color:var(--gold);
+  background:#fbd384;
+  transform:translateY(-9px)}
+.rolling .die{animation:tumble .65s ease-in-out}
+.roll{width:100%;
+  max-width:450px;
+  margin:0 0 14px}
+table{width:100%;
+  border-collapse:collapse;
+  font-variant-numeric:tabular-nums}
+th,td{padding:5px;
+  text-align:center;
+  border-bottom:1px solid var(--line);
+  font-size:15px}
+th:first-child{text-align:left;
+  font-weight:500}
+td{width:17%}
+td button{min-height:35px;
+  width:100%;
+  padding:5px;
+  background:#233c31;
+  color:var(--gold);
+  font-size:15px}
+td button.filled{color:var(--ink);
+  background:#294d3b;
+  opacity:1}
+tfoot th,tfoot td{font-weight:bold;
+  color:var(--gold)}
+.standings{display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:25px 0 0}
+.standing{padding:8px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  color:var(--muted)}
+.standing.active{border-color:var(--gold);
+  color:var(--ink)}
+.standing b{margin-left:12px;
+  color:var(--gold)}
+#error{color:#ffb6a4}
+#notice{min-height:25px}
+.display header{padding:2vh 4vw}
+.display header strong{font-size:4vh}
+.display main{max-width:none;
+  padding:2vh 4vw}
+.display .game-layout{grid-template-columns:1fr 1fr;
+  gap:3vw;
+  margin:0}
+.display .felt,.display .card{padding:2vh 2vw}
+.display h2{font-size:6vh;
+  margin:2vh 0}
+.display .eyebrow{font-size:2vh}
+.display .dice{margin:6vh 0;
+  gap:1vw}
+.display .die{width:7vw;
+  height:7vw;
+  max-width:100px;
+  max-height:100px;
+  padding:1vw;
+  gap:.4vw}
+.display th,.display td{font-size:2.45vh;
+  padding:.25vh}
+.display table{line-height:1.2}
+.display td button{font-size:2.4vh;
+  min-height:3.0vh;
+  line-height:1.1;
+  padding:.1vh;
+  cursor:default}
+.display .standings{margin:2vh 0 0;
+  justify-content:center}
+.display .standing{font-size:2.3vh;
+  padding:.6vh 1vw}
+.display .roll-info{font-size:3vh}
+.display #audio-status{font-size:2vh;
+  margin:.5vh}
+.display .tag,.display #connection{font-size:2vh}
+.display #enable-sound{position:fixed;
+  bottom:10px;
+  right:10px}
+.display .die:disabled,.viewer .die:disabled,.display td button:disabled,.viewer td button:disabled{opacity:1}
+.score-flash{color:var(--gold)}
+[hidden]{display:none!important}
+@keyframes tumble{0%,100%{transform:rotate(0)}
+40%{transform:translateY(-15px) rotate(15deg)}
+70%{transform:rotate(-12deg)}
+}
+@media(max-width:650px){header{padding:15px 5%;
+  gap:12px}
+header>a{font-size:24px}
+.game-layout{grid-template-columns:1fr;
+  gap:15px}
+.felt,.card{padding:15px}
+.panel{padding:20px}
+main{padding-top:20px}
+.dice{margin:20px 0}
+.die{width:49px;
+  height:49px;
+  padding:7px}
+.toolbar button{font-size:14px}
+.card th,.card td{font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){.rolling .die{animation:none}
+}
+

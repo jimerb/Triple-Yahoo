@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Triple Yahoo · Casting trial</title><link rel="stylesheet" href="/trial.css"></head>
+<body class="controller"><header><a href="/">Triple Yahoo!</a><span class="tag">Casting trial</span></header>
+<main><section id="setup" class="panel"><h1>Let's try the big screen.</h1><p>Keep your controls here. Everyone follows the game on the TV.</p>
+<form id="create"><label for="names">Players' nicknames</label><input id="names" required maxlength="160" placeholder="Jim, Terry" autocomplete="off"><small>One to six names, separated by commas. This trial lets one phone take all turns.</small><button class="primary" type="submit">Start trial</button></form></section>
+<section id="playing" hidden><div class="toolbar"><button id="cast" disabled><svg width="23" height="23" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 18a4 4 0 0 1 4 4M2 13a9 9 0 0 1 9 9M2 8a14 14 0 0 1 14 14M3 4h18v15h-3" fill="none" stroke="currentColor" stroke-width="2"/></svg> Show on TV</button><button id="stop-tv" hidden>Stop TV</button><button id="sound">Play sound here</button><button id="mute">Mute</button></div>
+<p id="cast-status" class="status" role="status">Checking casting…</p><p id="sound-status" class="status"></p>
+<div class="links"><a id="preview" target="_blank" rel="noopener">Open TV board preview</a><a id="watch" target="_blank" rel="noopener">Open a separate viewer</a><a id="display-link" target="_blank" rel="noopener">Use another Android to cast</a><button id="share-display">Share TV setup link</button></div>
+<p class="note">The preview checks the separate board. It does not prove casting to a TV.</p>
+<div id="board"></div><button class="primary roll" id="roll">Roll dice</button><p id="notice" role="status"></p>
+<button id="another">New trial</button></section><p id="error" role="alert"></p></main><script type="module" src="/controller.mjs"></script></body></html>
