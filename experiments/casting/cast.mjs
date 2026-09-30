@@ -1,9 +1,9 @@
 export const NAMESPACE = 'urn:x-cast:com.tripleyahoo.trial';
 export async function setupCast({ packet, status, readyButton }) {
   const { appId } = await fetch('/api/config').then(r => r.json());
-  if (!appId) { status('The casting trial needs its Google registration before Show on TV is available. Board previews work now.'); return { configured: false, stop() {} }; }
+  if (!appId) { status('For Show on TV, open the online casting trial using the link above. Start a new trial there. Board previews work here.'); return { configured: false, stop() {} }; }
   if (!/^[A-F0-9]{8}$/i.test(appId)) { status('The trial casting configuration needs attention.'); return { configured: false, stop() {} }; }
-  if (!window.isSecureContext) { status('Open the secure trial link to use Show on TV.'); return { configured: false, stop() {} }; }
+  if (!window.isSecureContext) { status('For Show on TV, open the online casting trial using the link above. Start a new trial there.'); return { configured: false, stop() {} }; }
   let context, session, listener;
   const attach = async () => {
     session = context.getCurrentSession(); if (!session) return;

@@ -2,6 +2,8 @@
 
 **Status: implemented and checked in desktop Chrome; actual Android-to-TV casting is not yet proven.**
 
+**For TV casting, use [the online casting trial](https://triple-yahoo-cast-trial.jimerb.chatgpt.site/).** It is hosted on OpenAI Sites, allows visitors without signing in, and has the registered Cast application configured. The local `127.0.0.1:4318` and home-network `192.168.1.81:4318` previews use separate rooms and remain for controller and board-preview checks. Their pages now link directly to the online trial instead of suggesting that Google registration is still missing. Start a new trial at the online address before casting.
+
 This isolated experiment tests a separate TV board while the casting phone remains a usable controller. It reuses the existing scoring engine without editing any working-game files. One controller takes all turns for one to six nicknames. This is deliberately smaller than the planned multiplayer release: no QR player joining, separate player seats, production persistence, or full-game UI changes.
 
 ## What is ready
@@ -60,18 +62,19 @@ node experiments/casting/cast-check.cjs
 | Google SDK adapter test doubles | Passed app configuration, callback order, custom namespace, credential isolation, spare Android setup flow and different-room rejection. |
 | Real Android Chrome Cast button and TV selection | Not tested. |
 | Actual LG display compatibility, audible sounds and sleep/takeover | Not tested. |
-| Public HTTPS test hosting | Not deployed. |
-| Custom Cast application registration | Not completed; developer console currently requests account signup. |
+| Public HTTPS test hosting | OpenAI Sites trial deployed; anonymous requests opened the controller and receiver pages successfully. |
+| Custom Cast application registration | Complete: application `12757F35`; the living-room casting puck shows Ready For Testing. |
+| Show on TV on the secure trial in desktop Chrome | Enabled; status says to select the display. Physical casting still awaits the device check. |
 
-These checks ran in a local Windows checkout of `multiplayer`, not the published cloud environment. The files and commands can be used in that environment later. No claim is made that a cloud task, public endpoint, or physical TV test has run.
+Gameplay checks ran in a local Windows checkout of `multiplayer`, not the published cloud development environment. The public Sites endpoint and its configured Cast button were subsequently checked. The files and commands can be used in the cloud environment later. Physical Android casting and TV audio remain untested.
 
 ## Developer setup before the physical trial
 
-1. Serve this separate experiment from an HTTPS Node-compatible host. A static GitHub Pages deployment alone cannot run the room service. Do not change the existing game's Pages configuration or expose the user's home computer. Keep the trial to one process/instance: rooms are in memory, expire after two hours, and disappear on service restart. This is not production storage.
+1. The online trial is already hosted on OpenAI Sites. Its separate Sites source adapts the room service to a Worker and shared saved room state. The original Node preview in this repository keeps rooms in memory, expires them after two hours, and loses them on service restart. Do not change the existing game's Pages configuration or expose the user's home computer to host the trial.
 2. Register a **Custom Receiver** in the Google Cast Developer Console. Its URL is the hosted trial's `/receiver.html`; use the registered application ID as the server environment variable `CAST_APP_ID`. An empty ID disables Show on TV honestly, while board preview remains available. Never substitute Google's Default Media Receiver or a made-up application ID for the game board.
 3. Google requires a one-time, non-refundable **$5 developer account registration** if there is no account yet. Account terms/payment need the owner's authorization. Players do not need Google developer accounts or game passwords.
 4. For an unpublished receiver trial, register the actual Cast device in the developer console, wait until it is ready for testing, and restart it as Google instructs. This is a developer test step, not the intended household setup. Do not publish the receiver broadly just to avoid registering a test device.
-5. Establish the actual LG model/casting path. YouTube appearing on the TV alone is not proof that a custom Google Cast receiver can run there. If that display supports only an app-specific YouTube path, test an existing compatible Cast device attached to it; disclose any hardware requirement before changing the product plan. An Android app cannot turn an incompatible television into a custom Cast receiver.
+5. The confirmed test display is an LG TV with an attached Google Chromecast puck. The puck is registered and shows Ready For Testing; restart its power before the trial. No LG app installation or TV-model investigation is needed. Actual custom receiver loading, play and audio still need the physical checks below.
 
 The Dockerfile can package this trial for a Node-compatible host, using the repository root as build context:
 
