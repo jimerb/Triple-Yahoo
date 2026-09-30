@@ -1,4 +1,4 @@
-import { request, subscribe } from './client.mjs';
+import { request, subscribe, newId } from './client.mjs';
 import { renderBoard } from './screen.mjs';
 import { TrialSound } from './sound.mjs';
 import { setupCast } from './cast.mjs';
@@ -24,7 +24,7 @@ function draw() {
 async function action(data) {
   if (pending || !state) return;
   pending = true; $('#error').textContent = ''; await sound.ready(); draw();
-  try { await request(`/api/rooms/${credentials.roomId}/action`,{...data,id:crypto.randomUUID(),revision:state.revision},credentials.controlToken); }
+  try { await request(`/api/rooms/${credentials.roomId}/action`,{...data,id:newId(),revision:state.revision},credentials.controlToken); }
   catch (e) { error(e); } finally { pending=false; draw(); }
 }
 async function openRoom(value) {

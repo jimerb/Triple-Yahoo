@@ -1,8 +1,8 @@
-import { request, subscribe } from './client.mjs';
+import { request, subscribe, newId } from './client.mjs';
 import { renderBoard } from './screen.mjs';
 import { TrialSound } from './sound.mjs';
 import { NAMESPACE } from './cast.mjs';
-const $=s=>document.querySelector(s), sound=new TrialSound(), instance=crypto.randomUUID();
+const $=s=>document.querySelector(s), sound=new TrialSound(), instance=newId();
 let config, state, disconnect, heartbeat, connected=false, castContext, senderId, shouldClaim=true, ownedSound=false;
 const report = (type,message) => { if(castContext&&senderId)castContext.sendCustomMessage(NAMESPACE,senderId,{type,message,roomId:config?.roomId}); };
 async function announceReady() {

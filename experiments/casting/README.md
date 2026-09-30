@@ -27,6 +27,18 @@ node --test tests.mjs experiments/casting/tests.mjs
 
 Open `http://127.0.0.1:4318` on the development PC. The working game continues using its unchanged server and port 4317. The trial server binds to loopback by default. This local preview is not a phone-accessible hosted link and does not prove casting.
 
+### Optional home-network preview
+
+Keep that trial server running and start a second terminal:
+
+```sh
+node experiments/casting/lan-preview.mjs
+```
+
+The helper prints the address to open on a phone or another PC on the same home subnet. If there is more than one private network address, pass the intended PC address as an argument. It binds only to that address, rejects requests from outside its local subnet, and forwards to the existing trial so rooms and the localhost preview remain intact. Keep both processes running. Windows Firewall must allow the Node runtime to receive these connections; no router port forwarding is needed.
+
+This HTTP LAN preview allows controller, board-preview and watcher testing. It does not supply HTTPS or enable browser casting; the secure Sites trial and registered receiver application are still needed for that proof.
+
 Optional browser checks require Playwright and Chrome (or set `TRIAL_BROWSER` to another installed Playwright channel):
 
 ```sh
