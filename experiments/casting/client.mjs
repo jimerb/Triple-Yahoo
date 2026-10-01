@@ -16,7 +16,7 @@ export function subscribe(config, onState, onConnection) {
   const stream = new EventSource(`/api/rooms/${config.roomId}/events?ticket=${encodeURIComponent(config.ticket)}`);
   stream.addEventListener('snapshot', e => { const state = JSON.parse(e.data); gate(state, true); onConnection(true); onState(state, false, true); });
   stream.addEventListener('state', e => { const state = JSON.parse(e.data); onState(state, gate(state), false); });
-  stream.addEventListener('expired', () => { stream.close(); onConnection(false, 'This trial room has expired.'); });
+  stream.addEventListener('expired', () => { stream.close(); onConnection(false, 'This trial room has expired.', 410); });
   stream.onerror = () => onConnection(false, 'Reconnecting…');
   return () => stream.close();
 }

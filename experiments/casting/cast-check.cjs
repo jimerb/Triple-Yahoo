@@ -9,7 +9,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
       const callbacks={};window.testCalls=[];let session=null;
       window.chrome.cast={AutoJoinPolicy:{ORIGIN_SCOPED:'origin'}};
       const context={setOptions(options){window.testOptions=options;},addEventListener(name,fn){callbacks[name]=fn;},getCurrentSession(){return session;},
-      async requestSession(){session={addMessageListener(){},removeMessageListener(){},async sendMessage(namespace,packet){window.testCalls.push({namespace,packet});},endSession(){session=null;callbacks.changed({sessionState:'ended'});}};callbacks.changed({sessionState:'started'});}};
+      async requestSession(){session={addMessageListener(ns,fn){this.listener=fn;},removeMessageListener(){},async sendMessage(namespace,packet){window.testCalls.push({namespace,packet});this.listener(namespace,{type:'attached',roomId:packet.roomId,attempt:packet.attempt});},endSession(){session=null;callbacks.changed({sessionState:'ended'});}};callbacks.changed({sessionState:'started'});}};
       window.cast={framework:{CastContext:{getInstance:()=>context},CastContextEventType:{SESSION_STATE_CHANGED:'changed'},SessionState:{SESSION_STARTED:'started',SESSION_RESUMED:'resumed',SESSION_ENDED:'ended',SESSION_START_FAILED:'failed'}}};
       window.__onGCastApiAvailable(true);
     `}));
@@ -29,7 +29,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
     const preview=new URL(base+await phone.locator('#preview').getAttribute('href'));
     const packet=JSON.parse(decodeURIComponent(preview.hash.slice(1)));
     await context.route('https://www.gstatic.com/cast/sdk/libs/caf_receiver/**',route=>route.fulfill({contentType:'text/javascript',body:`
-      window.cast={framework:{system:{MessageType:{JSON:'json'}},CastReceiverContext:{getInstance:()=>({addCustomMessageListener(ns,fn){window.receiverListener=fn;window.receiverNamespace=ns;},sendCustomMessage(ns,sender,message){window.receiverReply=message;},start(options){window.receiverOptions=options;}})}}};
+      window.cast={framework:{system:{MessageType:{JSON:'json'},EventType:{READY:'ready'}},CastReceiverContext:{getInstance:()=>({addCustomMessageListener(ns,fn){window.receiverListener=fn;window.receiverNamespace=ns;},addEventListener(){},isSystemReady(){return true;},setApplicationState(){},sendCustomMessage(ns,sender,message){window.receiverReply=message;},start(options){window.receiverOptions=options;}})}}};
     `}));
     const receiver=await context.newPage();await receiver.goto(base+'/receiver.html');await receiver.waitForFunction(()=>!!window.receiverListener);
     await receiver.evaluate(packet=>window.receiverListener({senderId:'test-sender',data:{type:'attach',...packet}}),packet);
@@ -38,7 +38,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
     assert.equal(await receiver.locator('#board h2').innerText(),"Trial's turn");
     const other=await context.request.post(base+'/api/rooms',{data:{names:['Another trial']}});const otherKeys=await other.json();
     await receiver.evaluate(packet=>window.receiverListener({senderId:'second-sender',data:packet}),{type:'attach',version:1,roomId:otherKeys.roomId,displayToken:otherKeys.displayToken});
-    await receiver.waitForFunction(()=>document.querySelector('#error').textContent.includes('already following'));
+    await receiver.waitForFunction(()=>window.receiverReply?.message?.includes('already following'));
     assert.equal(await receiver.locator('#board h2').innerText(),"Trial's turn",'Different room cannot hijack an attached board');
     console.log('PASS: sender callback order, registered app configuration, custom attach protocol, control credential isolation, retained phone state, no premature muting, receiver namespace options, and cross-room takeover rejection. SDK test doubles only; no physical casting claim.');
   }finally{await context.close();await browser.close();}

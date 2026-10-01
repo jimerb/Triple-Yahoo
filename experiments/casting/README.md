@@ -82,6 +82,20 @@ All 20 rule, Node trial and controller tests passed. The Sites service passed it
 
 For the follow-up, stop casting, refresh the hosted trial on the phone, and select Show on TV again. Check visible pips, immediate selection feedback and the native Cast label. The hosted game uses the Sites address; do not substitute the PC IP address in Google registration.
 
+## Next-day recovery fixes on October 1, 2026
+
+The following-day attempt did not launch the TV board. The phone reported the generic “Casting did not start” message, which discarded Google's failure code. The exact physical launch failure is not yet established.
+
+New trial now waits for the existing Cast session to end before clearing the phone's game. Stop failures preserve that game. Stop TV is also available for a stale Cast session without an attached board. The receiver releases expired rooms and accepts an authorized replacement after room expiry, while rejecting takeover of a live room and refusing replacement when the old room cannot be checked.
+
+Attachments wait for a receiver acknowledgement, with an attempt identifier and a 12-second timeout. Receiver errors identify the requested room so the phone can display them. Google launch errors retain their code and recovery instructions. The phone remains the sound source until the display confirms audio readiness.
+
+All 27 existing-rule, Node trial, controller and recovery tests passed. The Sites service passed 18 tests, build and artifact validation. A fresh Chrome trial initialized and enabled its Cast controls; the browser reset check was blocked by its native confirmation dialog. Automated tests verified reset and failed-stop ordering. Physical Android/TV reconnection, dice pips, responsiveness and audio still require device verification. Existing game files remain unchanged.
+
+```sh
+node --test tests.mjs experiments/casting/tests.mjs experiments/casting/controller-state.test.mjs experiments/casting/cast-recovery.test.mjs
+```
+
 ## Developer setup before the physical trial
 
 1. The online trial is already hosted on OpenAI Sites. Its separate Sites source adapts the room service to a Worker and shared saved room state. The original Node preview in this repository keeps rooms in memory, expires them after two hours, and loses them on service restart. Do not change the existing game's Pages configuration or expose the user's home computer to host the trial.

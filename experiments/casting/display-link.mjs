@@ -8,4 +8,4 @@ else{
     .then(()=>setupCast({packet:()=>config,status:text=>{$('#cast-status').textContent=text;},readyButton:handler=>{$('#cast').disabled=false;$('#cast').onclick=handler;}}))
     .then(value=>{casting=value;}).catch(e=>{$('#error').textContent=e.message;});
 }
-$('#stop').onclick=async()=>{if(!config)return;casting?.stop();try{const state=await request(`/api/rooms/${config.roomId}/state`,undefined,config.displayToken);if(state.displayConnected)await request(`/api/rooms/${config.roomId}/display`,{instance:state.soundOwner,ready:false},config.displayToken);$('#cast-status').textContent='TV stopped. The game continues on its controller phone.';}catch(e){$('#error').textContent=e.message;}};
+$('#stop').onclick=async()=>{if(!config)return;try{await casting?.stop();const state=await request(`/api/rooms/${config.roomId}/state`,undefined,config.displayToken);if(state.displayConnected)await request(`/api/rooms/${config.roomId}/display`,{instance:state.soundOwner,ready:false},config.displayToken);$('#cast-status').textContent='TV stopped. The game continues on its controller phone.';}catch(e){$('#error').textContent=e.message;}};
