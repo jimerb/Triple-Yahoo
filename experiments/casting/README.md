@@ -96,6 +96,16 @@ All 27 existing-rule, Node trial, controller and recovery tests passed. The Site
 node --test tests.mjs experiments/casting/tests.mjs experiments/casting/controller-state.test.mjs experiments/casting/cast-recovery.test.mjs
 ```
 
+## Cast launch waiting correction on October 1, 2026
+
+The next physical attempt still stalled after TV selection, showing “Choose your TV. Waiting for casting to start”. The hosted game's recent Android requests succeeded, but there was no fresh receiver request in the observed logs. The Google developer console still showed the correct receiver URL and the puck Ready For Testing. The physical launch cause remains unknown.
+
+The sender now waits for an actual session from Google's promise or session events, displays TV-selected progress, captures session-event error codes, and times out after 45 seconds per stage. Reset TV connection preserves the saved game, reloads the page and disables automatic restoration of the previous saved Cast session for that fresh attempt. A timed-out native request cannot be duplicated, and its late results cannot change a newer request.
+
+All 33 existing-rule, Node trial, controller and recovery tests passed. Sites passed 24 tests, build and artifact validation. A fresh Chrome trial loaded and enabled Show on TV. The six new tests cover a pending Google promise, early promise fulfillment, launch timeout, late failures, cancellation and a reset that retains game data. Real Android/TV recovery remains pending. No original game file changed.
+
+See [Google CastContext](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.CastContext) and [SessionStateEventData.errorCode](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.SessionStateEventData).
+
 ## Developer setup before the physical trial
 
 1. The online trial is already hosted on OpenAI Sites. Its separate Sites source adapts the room service to a Worker and shared saved room state. The original Node preview in this repository keeps rooms in memory, expires them after two hours, and loses them on service restart. Do not change the existing game's Pages configuration or expose the user's home computer to host the trial.

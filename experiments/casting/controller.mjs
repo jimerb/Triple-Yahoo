@@ -3,7 +3,7 @@ import { renderBoard } from './screen.mjs';
 import { TrialSound } from './sound.mjs';
 import { setupCast } from './cast.mjs';
 import { ControllerState } from './controller-state.mjs';
-import { startAnotherTrial } from './cast-connection.mjs';
+import { startAnotherTrial,reloadTvConnection } from './cast-connection.mjs';
 import { score } from '/engine.mjs';
 const $ = s => document.querySelector(s), sound = new TrialSound();
 let credentials, state, closing, casting, sync, castConnected=false, pending = false, animationUntil = 0, animationTimer, muted = false;
@@ -45,7 +45,7 @@ async function openRoom(value) {
     sync.receive(next,snapshot);
   }, connected => { if (!connected) { sound.setMuted(true); $('#notice').textContent='Reconnecting to the game…'; } else $('#notice').textContent='One phone controls this trial; the TV and viewers follow independently.'; });
   draw();
-  casting = await setupCast({packet:()=>({roomId:credentials.roomId,displayToken:credentials.displayToken}),status:text=>{$('#cast-status').textContent=text;},sessionChanged:value=>{castConnected=value;draw();},readyButton:handler=>{$('#cast').disabled=false;$('#cast').onclick=handler;}});
+  casting = await setupCast({packet:()=>({roomId:credentials.roomId,displayToken:credentials.displayToken}),status:text=>{$('#cast-status').textContent=text;},sessionChanged:value=>{castConnected=value;draw();},busyChanged:value=>{$('#cast').disabled=value;},recovery:value=>{$('#reset-tv').hidden=!value;},readyButton:handler=>{$('#cast').disabled=false;$('#cast').onclick=handler;}});
 }
 $('#create').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';await sound.ready();try{await openRoom(await request('/api/rooms',{names:$('#names').value.split(',').map(n=>n.trim())}));}catch(e){error(e);}};
 $('#roll').onclick=()=>action({type:'roll'});
@@ -53,6 +53,7 @@ $('#share-display').onclick=async()=>{const url=$('#display-link').href;try{if(n
 $('#sound').onclick=()=>{muted=false;action({type:'phone-sound'});};
 $('#mute').onclick=()=>{muted=!muted;$('#mute').textContent=muted?'Unmute':'Mute';sound.setMuted(muted);draw();};
 $('#stop-tv').onclick=async()=>{try{await casting?.stop();await action({type:'phone-sound'});}catch(e){error(e);}};
+$('#reset-tv').onclick=()=>reloadTvConnection(window.sessionStorage,()=>location.reload());
 $('#another').onclick=async()=>{
   if(!confirm('Leave this trial and start a new one?'))return;
   $('#another').disabled=true;

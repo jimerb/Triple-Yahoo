@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CastConnection,castFailure,startAnotherTrial} from './cast-connection.mjs';
+import {CastConnection,CastLaunch,castFailure,startAnotherTrial,reloadTvConnection,useFreshTvConnection} from './cast-connection.mjs';
 import {validateAttachment} from './receiver-attachment.mjs';
 import {TrialRooms} from './room.mjs';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -52,4 +52,53 @@ test('next-day room expiry releases the board while live games remain protected'
   const other=rooms.create(['Another']);const otherPacket={version:1,roomId:other.roomId,displayToken:other.displayToken};
   await assert.rejects(validateAttachment(next,otherPacket,read),/already following/);
   await assert.rejects(validateAttachment(previous,{...next,displayToken:other.displayToken},read),error=>error.status===403);
+});
+
+function launchFixture(requestSession=()=>new Promise(()=>{})) {
+  let current=null;const statuses=[],recoveries=[];
+  const launch=new CastLaunch({requestSession,getSession:()=>current,status:s=>statuses.push(s),recovery:r=>recoveries.push(r),timeoutMs:25});
+  return {launch,statuses,recoveries,setSession:s=>{current=s;}};
+}
+
+test('session-started events finish launch even if Google never settles its selection promise',async()=>{
+  let requests=0;const f=launchFixture(()=>{requests++;return new Promise(()=>{});});
+  const wait=f.launch.start();assert.equal(requests,1,'Native request starts within the original tap');
+  assert.equal(f.launch.start(),wait);f.launch.starting();assert.match(f.statuses.at(-1),/TV selected/);
+  const session={};f.setSession(session);assert.equal(f.launch.started(session),true);assert.equal(await wait,session);
+  assert.equal(f.recoveries.at(-1),false);
+});
+
+test('a fulfilled Google request without a session is not a connected TV',async()=>{
+  const f=launchFixture(()=>Promise.resolve());const wait=f.launch.start();let completed=false;wait.then(()=>{completed=true;});
+  await tick();assert.equal(completed,false);assert.match(f.statuses.at(-1),/TV selected/);
+  const session={};f.setSession(session);f.launch.started(session);assert.equal(await wait,session);
+});
+
+test('a stuck launch times out, offers reset and cannot stack native requests',async()=>{
+  let requests=0;const f=launchFixture(()=>{requests++;return new Promise(()=>{});});
+  await assert.rejects(f.launch.start(),/launch_timeout.*Reset TV connection/);assert.equal(f.recoveries.at(-1),true);
+  await assert.rejects(f.launch.start(),/launch_timeout/);assert.equal(requests,1);
+  const session={};f.setSession(session);assert.equal(f.launch.started(session),false);assert.equal(await f.launch.start(),session);
+});
+
+test('Google session-event error codes unblock a pending request; late errors cannot affect its retry',async()=>{
+  let rejectOld,requests=0;
+  const f=launchFixture(()=>++requests===1?new Promise((_,reject)=>{rejectOld=reject;}):new Promise(()=>{}));
+  const wait=f.launch.start(),failed=assert.rejects(wait,e=>castFailure(e).includes('receiver_unavailable'));
+  f.launch.failed('receiver_unavailable');await failed;
+  const retry=f.launch.start();rejectOld('timeout');await tick();assert.ok(f.launch.pending);
+  const session={};f.setSession(session);f.launch.started(session);assert.equal(await retry,session);
+});
+
+test('canceling an unfinished launch settles it without waiting for Google',async()=>{
+  const f=launchFixture();const wait=f.launch.start(),canceled=assert.rejects(wait,e=>e.code==='stopped');
+  f.launch.cancel();await canceled;assert.equal(f.launch.pending,null);
+});
+
+test('TV connection reset requests one fresh launch without deleting saved game data',()=>{
+  const saved=new Map([['game','keep-game']]);let reloads=0;
+  const storage={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
+  reloadTvConnection(storage,()=>reloads++);assert.equal(reloads,1);assert.equal(saved.get('game'),'keep-game');
+  assert.equal(useFreshTvConnection(storage),true);assert.equal(useFreshTvConnection(storage),false);
+  assert.equal(saved.get('game'),'keep-game');
 });
