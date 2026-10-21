@@ -1,146 +1,47 @@
-# Casting trial
+# Triple Yahoo: concurrent-round multiplayer experiment
 
-**Status: the actual Android phone launched the independent board on the registered Chromecast and scores updated. Dice pips, selection responsiveness and Cast labeling need a follow-up device check after the fixes below.**
+This experiment is isolated on the `multiplayer` branch in draft [PR #3](https://github.com/jimerb/Triple-Yahoo/pull/3). **DO NOT MERGE.** It may change substantially. The original game, scoring engine, saved games, and released `main` remain unchanged.
 
-**For TV casting, use [the online casting trial](https://triple-yahoo-cast-trial.jimerb.chatgpt.site/).** It is hosted on OpenAI Sites, allows visitors without signing in, and has the registered Cast application configured. The local `127.0.0.1:4318` and home-network `192.168.1.81:4318` previews use separate rooms and remain for controller and board-preview checks. Their pages now link directly to the online trial instead of suggesting that Google registration is still missing. Start a new trial at the online address before casting.
+## Play together
 
-This isolated experiment tests a separate TV board while the casting phone remains a usable controller. It reuses the existing scoring engine without editing any working-game files. One controller takes all turns for one to six nicknames. This is deliberately smaller than the planned multiplayer release: no QR player joining, separate player seats, production persistence, or full-game UI changes.
+1. The organizer enters a nickname and creates a room.
+2. Everyone nearby scans the room's QR, edits or confirms a nickname, and taps **Join Game**. Opening a QR alone does not take a seat. Up to six players can join before the organizer starts.
+3. All players play round 1 at the same time, each with their own five dice and scorecard. Each gets up to three rolls and commits one empty scoring box. Selected dice are the ones to reroll, matching the original rules.
+4. Finished players keep their final dice and score visible while the others finish. Once every remaining player has scored, the next round opens automatically. After 39 rounds, show all winners, standings, and completed cards.
+5. The organizer can choose **Play again** to return the same group to the lobby, review the roster, and start another game.
 
-## What is ready
+There are no remote-player roles, share-invitation buttons, separate-place sound groups, or remote viewer pages. QR invitations are bearer links under the hood: someone could photograph or forward one. QR-only UX does not prove physical presence or geofence a room. Joining closes at game start; nicknames are labels and do not grant another player's seat.
 
-- A controller with **Show on TV**, playable roll/reroll/score controls, and zero-score confirmation.
-- A custom Cast web receiver with a large shared board. It receives a room invitation and reads game state directly from the trial service; the phone never supplies a mirrored screen or forwards ongoing moves.
-- A TV setup link for a spare Android, or a second Android resuming the same board, without taking a player seat.
-- One room sound source. The phone stays audible until display audio is ready. A short display lease restores phone sound after loss. **Play sound here** transfers sound back; a late heartbeat cannot reclaim it.
-- A separate watcher who explicitly chooses together/quiet or separately/own sound. Joining by link never infers location.
-- Credential separation: viewers cannot roll, display invitations do not contain controller credentials, and another room cannot take over an attached board.
-- Reconnecting starts with a silent current-state snapshot. It does not reroll dice or replay old sounds.
+## Phones, TV, and sound
 
-The trial uses simpler dice animation and approximate roll audio to expose casting mechanics. The final build must retain the existing game's polished animation and sound behavior.
+Each phone always controls its own card and dice; dice remain visible while the card scrolls. A collapsible shared board lets players inspect the group without moving their controls. The shared TV is an independent fixed grid containing everyone's dice, reroll choices, scorecard, total, and finished/reconnecting status. It never cycles through a single active player.
 
-## Local development
+An Android player can cast and play on the same phone. A spare Wi-Fi Android can scan a separate TV-setup QR without occupying a seat. The registered Custom Receiver remains **12757F35** at the existing HTTPS Sites `/receiver.html` URL. No TV application installation or router/port changes are part of this design. iOS remains a browser controller and is not expected to initiate casting.
 
-From the repository root, using Node.js:
+One device supplies room sound: initially the organizer's phone, then the TV only after its audio is ready. **Use this phone** transfers that single sound source; **Mute** silences locally. Bursts of simultaneous sounds are coalesced instead of producing six overlapping effects. Reconnecting snapshots never replay old rolls. Actual TV sound, mobile backgrounding, and the earlier physical Cast launch failure still need device verification.
 
-```sh
-node experiments/casting/server.mjs
-node --test tests.mjs experiments/casting/tests.mjs
+## Recovery and safety
+
+The hosted service owns each player's dice, rolls, card, and revision, plus a shared round barrier. Another player's move or a sound heartbeat cannot invalidate your move. Writes validate the seat, game, round, and personal revision. Duplicate commands cannot grant another roll or score. Dice selection gives immediate local feedback while the confirmed result remains authoritative.
+
+A missing player holds up the next round. The organizer can explicitly remove that seat; its partial card remains visible and it no longer blocks progress. No automatic moves or skips occur. If the organizer has been offline for more than 45 seconds, a remaining player can explicitly **Take over organizing**, then remove a departed player if necessary. Old organizer credentials are revoked. Refresh restores saved seats; nicknames alone cannot reclaim them. Rooms expire after four hours. Earlier single-controller trial rooms require a new room.
+
+The public Sites trial provides HTTPS and persistent shared rooms; nearby players still need internet. The organizer's phone is not a web server. The local Node preview below stores rooms in memory and loses them on restart. Local HTTP preview does not prove Cast discovery or launching.
+
+## Development
+
+Run `node experiments/casting/server.mjs` from the repository for the loopback preview on port 4318. Set `HOST` to a specifically intended interface only for authorized LAN testing. `CAST_APP_ID` is an optional configuration value, not a secret. Real casting should use the existing HTTPS trial site.
+
+Run:
+
+```text
+node --test tests.mjs experiments/casting/tests.mjs experiments/casting/rounds.test.mjs experiments/casting/controller-state.test.mjs experiments/casting/cast-recovery.test.mjs
 ```
 
-Open `http://127.0.0.1:4318` on the development PC. The working game continues using its unchanged server and port 4317. The trial server binds to loopback by default. This local preview is not a phone-accessible hosted link and does not prove casting.
+The original scoring tests, full six-player 39-round completion, independent controls, barrier/idempotency, reconnect/removal, organizer recovery, sound leases, HTTP access boundaries, and Cast lifecycle logic are covered. The Sites adapter separately tests concurrent database writes and Worker transport. Vendored QR generation is Nayuki's MIT-licensed encoder; its license is retained under `vendor/`.
 
-### Optional home-network preview
+Browser QA: an actual rendered QR decoded independently, two browser seats joined with editable names, rolled independently, waited at the barrier and advanced together. Six complete cards and dice fit a 1280 by 720 shared board. A 375 CSS-pixel phone view retained visible dice above the scrolling card without horizontal overflow. These desktop checks do not establish physical iOS/Android or Chromecast success.
 
-Keep that trial server running and start a second terminal:
+## Earlier physical casting evidence
 
-```sh
-node experiments/casting/lan-preview.mjs
-```
-
-The helper prints the address to open on a phone or another PC on the same home subnet. If there is more than one private network address, pass the intended PC address as an argument. It binds only to that address, rejects requests from outside its local subnet, and forwards to the existing trial so rooms and the localhost preview remain intact. Keep both processes running. Windows Firewall must allow the Node runtime to receive these connections; no router port forwarding is needed.
-
-This HTTP LAN preview allows controller, board-preview and watcher testing. It does not supply HTTPS or enable browser casting; the secure Sites trial and registered receiver application are still needed for that proof.
-
-Optional browser checks require Playwright and Chrome (or set `TRIAL_BROWSER` to another installed Playwright channel):
-
-```sh
-node experiments/casting/browser-check.cjs
-node experiments/casting/cast-check.cjs
-```
-
-`cast-check.cjs` uses explicit Google SDK test doubles. Passing it verifies our adapter contract; it says nothing about display discovery, native dialogs, Google registration, or physical TV behavior. The board-preview browser check uses the real trial service and real browser audio readiness, not a TV.
-
-## Checks recorded on September 30, 2026
-
-| Check | Result |
-| --- | --- |
-| Existing scoring/turn rule tests | All 5 passed; existing engine and tests unchanged. |
-| New trial state, access, expiry, sound, replay and HTTP tests | All 9 passed, including a complete six-player game. |
-| Independent controller, board and separate viewer in Chrome | Passed shared dice/turn/score updates, late display attachment, controller refresh and closure. |
-| Sound ownership in the browser preview | Passed TV-ready handoff, transfer back to phone, no automatic reclaim, and separate watcher behavior. This is not a by-ear sound check. |
-| Layout | 390px phone and 1280×720 board passed; six long nicknames fit the TV board without overflow. |
-| Google SDK adapter test doubles | Passed app configuration, callback order, custom namespace, credential isolation, spare Android setup flow and different-room rejection. |
-| Real Android Chrome Cast button and TV selection | User reached the custom board on the registered Chromecast; supplied phone and TV photos. |
-| Actual LG display compatibility, audible sounds and sleep/takeover | Board and score updates observed; dice pips failed in the first trial. Audio, sleep and takeover remain unverified. |
-| Public HTTPS test hosting | OpenAI Sites trial deployed; anonymous requests opened the controller and receiver pages successfully. |
-| Custom Cast application registration | Complete: application `12757F35`; the living-room casting puck shows Ready For Testing. |
-| Show on TV on the secure trial in desktop Chrome | Enabled; status says to select the display. Physical casting still awaits the device check. |
-
-Gameplay checks ran in a local Windows checkout of `multiplayer`, not the published cloud development environment. The public Sites endpoint and its configured Cast button were subsequently checked. The files and commands can be used in the cloud environment later. Physical Android board launch and score updates are now observed. TV audio and the remaining recovery checks are unverified.
-
-## First physical trial and follow-up fixes
-
-On September 30, the user cast from Android to the registered Chromecast and supplied photos of the independent shared board. Scores followed play correctly, but dice bodies had no pips, selection feedback took about four seconds, and the native Cast popup showed 127.0.0.1:4318 despite opening the hosted Site.
-
-The deployed receiver uses an older Chrome 90 browser. Dice now use explicit inline SVG circles inside ordinary block buttons, replacing CSS grid children inside native buttons. This removes the dice-face layout dependency implicated by the blank TV faces; the updated faces still need a physical recheck.
-
-The controller previously discarded action responses and waited for the event stream to repaint selections. It now shows selection intent immediately, coalesces rapid taps into complete selection masks, uses returned authoritative state for rolls and scores, retries stale selection revisions, and restores confirmed state on request failure. Roll and score controls wait for pending selections to be confirmed. Action acknowledgements and later stream echoes cannot play the same cue twice.
-
-Google registration was checked: the receiver URL points to the HTTPS Sites board, not localhost. The receiver now supplies an explicit Triple Yahoo application-state label. The exact source of the native localhost popup label is unconfirmed; stop the old Cast session and start a fresh one before evaluating this change.
-
-All 20 rule, Node trial and controller tests passed. The Sites service passed its 10 Worker/controller tests and artifact validation. Browser checks confirmed visible pips, rapid selections, matching independent board state and scoring to the next player. These checks do not establish physical TV rendering or latency after the update.
-
-For the follow-up, stop casting, refresh the hosted trial on the phone, and select Show on TV again. Check visible pips, immediate selection feedback and the native Cast label. The hosted game uses the Sites address; do not substitute the PC IP address in Google registration.
-
-## Next-day recovery fixes on October 1, 2026
-
-The following-day attempt did not launch the TV board. The phone reported the generic “Casting did not start” message, which discarded Google's failure code. The exact physical launch failure is not yet established.
-
-New trial now waits for the existing Cast session to end before clearing the phone's game. Stop failures preserve that game. Stop TV is also available for a stale Cast session without an attached board. The receiver releases expired rooms and accepts an authorized replacement after room expiry, while rejecting takeover of a live room and refusing replacement when the old room cannot be checked.
-
-Attachments wait for a receiver acknowledgement, with an attempt identifier and a 12-second timeout. Receiver errors identify the requested room so the phone can display them. Google launch errors retain their code and recovery instructions. The phone remains the sound source until the display confirms audio readiness.
-
-All 27 existing-rule, Node trial, controller and recovery tests passed. The Sites service passed 18 tests, build and artifact validation. A fresh Chrome trial initialized and enabled its Cast controls; the browser reset check was blocked by its native confirmation dialog. Automated tests verified reset and failed-stop ordering. Physical Android/TV reconnection, dice pips, responsiveness and audio still require device verification. Existing game files remain unchanged.
-
-```sh
-node --test tests.mjs experiments/casting/tests.mjs experiments/casting/controller-state.test.mjs experiments/casting/cast-recovery.test.mjs
-```
-
-## Cast launch waiting correction on October 1, 2026
-
-The next physical attempt still stalled after TV selection, showing “Choose your TV. Waiting for casting to start”. The hosted game's recent Android requests succeeded, but there was no fresh receiver request in the observed logs. The Google developer console still showed the correct receiver URL and the puck Ready For Testing. The physical launch cause remains unknown.
-
-The sender now waits for an actual session from Google's promise or session events, displays TV-selected progress, captures session-event error codes, and times out after 45 seconds per stage. Reset TV connection preserves the saved game, reloads the page and disables automatic restoration of the previous saved Cast session for that fresh attempt. A timed-out native request cannot be duplicated, and its late results cannot change a newer request.
-
-All 33 existing-rule, Node trial, controller and recovery tests passed. Sites passed 24 tests, build and artifact validation. A fresh Chrome trial loaded and enabled Show on TV. The six new tests cover a pending Google promise, early promise fulfillment, launch timeout, late failures, cancellation and a reset that retains game data. Real Android/TV recovery remains pending. No original game file changed.
-
-See [Google CastContext](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.CastContext) and [SessionStateEventData.errorCode](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.SessionStateEventData).
-
-## Developer setup before the physical trial
-
-1. The online trial is already hosted on OpenAI Sites. Its separate Sites source adapts the room service to a Worker and shared saved room state. The original Node preview in this repository keeps rooms in memory, expires them after two hours, and loses them on service restart. Do not change the existing game's Pages configuration or expose the user's home computer to host the trial.
-2. Register a **Custom Receiver** in the Google Cast Developer Console. Its URL is the hosted trial's `/receiver.html`; use the registered application ID as the server environment variable `CAST_APP_ID`. An empty ID disables Show on TV honestly, while board preview remains available. Never substitute Google's Default Media Receiver or a made-up application ID for the game board.
-3. Google requires a one-time, non-refundable **$5 developer account registration** if there is no account yet. Account terms/payment need the owner's authorization. Players do not need Google developer accounts or game passwords.
-4. For an unpublished receiver trial, register the actual Cast device in the developer console, wait until it is ready for testing, and restart it as Google instructs. This is a developer test step, not the intended household setup. Do not publish the receiver broadly just to avoid registering a test device.
-5. The confirmed test display is an LG TV with an attached Google Chromecast puck. The puck is registered and shows Ready For Testing; restart its power before the trial. No LG app installation or TV-model investigation is needed. The custom board launched and scores updated. Rendering, responsiveness, audio and recovery still need the physical checks below.
-
-The Dockerfile can package this trial for a Node-compatible host, using the repository root as build context:
-
-```sh
-docker build -f experiments/casting/Dockerfile -t triple-yahoo-cast-trial .
-```
-
-The container listens on port 8080; its hosting service supplies HTTPS. The Docker build itself has not been run in this workspace.
-
-## The short physical test
-
-Once the developer setup is complete, the user steps should be:
-
-1. Open the secure trial link in Android Chrome. Enter two nicknames and tap **Start trial**.
-2. Tap **Show on TV** and choose the living-room display. The phone retains its controls while the TV shows its separate board.
-3. Roll, select dice to reroll, and score. The TV follows the same dice and active scorecard. Confirm by ear that room sounds come from the TV once and the phone is quiet.
-4. Open the watcher link on a second device and choose **Separately**. Confirm it hears every roll while the original room remains quiet on its phones. Choose **Together** in another watcher to confirm it stays quiet.
-5. Refresh the controller, then briefly lock it and reopen it. Check that dice, scores and turn survive and old sounds do not replay. Close the original controller and observe whether the actual TV keeps its board; record the result rather than assuming it.
-6. Use the TV setup link on another compatible Android and select the existing display. The same room and board must resume without a new game. Try a different room to confirm it cannot silently replace the active board.
-7. Stop the TV. Confirm the original phone can continue and room sound returns once. The separate watcher's sound remains independent.
-
-Record the Android/browser versions, actual TV/Cast model, each result, and any recovery steps. **The casting milestone passes only after the real Android/TV checks pass.** If browser casting fails on the actual Android, the next trial is one integrated Android sender app with the game controls and Cast button, using this same registered receiver and room service.
-
-## Official references
-
-- [Google Web Sender setup and supported platforms](https://developers.google.com/cast/docs/web_sender)
-- [Sender integration, custom Cast buttons and session lifecycle](https://developers.google.com/cast/docs/web_sender/integrate)
-- [Custom web receiver](https://developers.google.com/cast/docs/web_receiver/basic)
-- [Receiver custom-message channels](https://developers.google.com/cast/docs/web_receiver/core_features#custom_messages)
-- [Non-media receiver options](https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.CastReceiverOptions)
-- [App/device registration and the developer account fee](https://developers.google.com/cast/docs/registration)
+The September 30 trial launched on the household Chromecast and updated scores, but the TV dice were blank, selection was slow, and a native popup showed localhost. Later launches failed after TV selection. Existing SVG pips, immediate selection feedback, session polling, staged timeouts, explicit receiver acknowledgements, and bounded reset/stop recovery are retained. Their physical-device outcome remains unverified; this redesign does not claim to solve the underlying launch cause.

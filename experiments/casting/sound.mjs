@@ -12,6 +12,12 @@ export class TrialSound {
   }
   stop() { for (const s of this.active) { try { s.stop(); } catch {} } this.active.clear(); }
   setMuted(value) { this.muted = value; if (value) this.stop(); }
+  playMany(cues) {
+    if(this.muted||!cues?.length)return;
+    const cue=cues.findLast?cues.findLast(c=>c.type==='complete'||c.type==='round')||cues[cues.length-1]:[...cues].reverse().find(c=>c.type==='complete'||c.type==='round')||cues[cues.length-1];
+    if(Date.now()-(this.lastCueAt||0)<300)return;
+    this.lastCueAt=Date.now();this.play(cue);
+  }
   play(cue) {
     if (this.muted || this.context?.state !== 'running') return;
     this.stop();

@@ -1,87 +1,33 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TrialRooms, LEASE_MS, ROOM_TTL_MS } from './room.mjs';
-import { eventGate } from './events.mjs';
-import { createTrialServer } from './server.mjs';
-
-function fixture(){let time=10000;const rooms=new TrialRooms({clock:()=>time,random:()=>0});const keys=rooms.create(['Jim','Terry']);const room=rooms.get(keys.roomId);return{rooms,room,keys,advance:ms=>{time+=ms;},action:data=>rooms.action(room,keys.controlToken,{id:Math.random().toString(),revision:room.revision,...data})};}
-test('controller can roll and score; duplicate and stale commands cannot gain rolls or scores',()=>{
-  const f=fixture();assert.throws(()=>f.action({type:'score',row:0,column:0}),/Confirm|unavailable/);
-  f.action({type:'roll',id:'roll-1'});assert.deepEqual(f.room.game.dice,[1,1,1,1,1]);assert.equal(f.room.game.rolls,1);
-  f.action({type:'roll',id:'roll-1',revision:0});assert.equal(f.room.game.rolls,1);
-  assert.throws(()=>f.action({type:'roll',id:'roll-2',revision:0}),/updated/);
-  f.action({type:'score',row:0,column:2,id:'score-1'});assert.equal(f.room.game.players[0].card[0][2],15);assert.equal(f.room.game.active,1);
-  f.action({type:'score',row:0,column:2,id:'score-1',revision:1});assert.equal(f.room.game.active,1);
-});
-test('invalid dice, categories, turns, and zero confirmation are rejected without mutation',()=>{
-  const f=fixture();f.action({type:'roll'});const original=structuredClone(f.room.game);
-  for(const data of [{type:'toggle',die:5},{type:'score',row:13,column:0},{type:'score',row:0,column:3},{type:'score',row:1,column:0}])assert.throws(()=>f.action(data));
-  assert.deepEqual(f.room.game,original);f.action({type:'score',row:1,column:0,confirmZero:true});assert.equal(f.room.game.players[0].card[1][0],0);
-});
-test('viewer and display credentials cannot roll; display cannot use another room',()=>{
-  const f=fixture();for(const t of [f.keys.viewToken,f.keys.displayToken,'bogus','🙂'.repeat(16)])assert.throws(()=>f.rooms.action(f.room,t,{type:'roll',id:'x',revision:0}),/cannot access/);
-  assert.throws(()=>f.rooms.display(f.room,f.keys.viewToken,{instance:'display-one',ready:true}),/cannot access/);
-  const other=f.rooms.create(['Other']);assert.throws(()=>f.rooms.authorize(f.rooms.get(other.roomId),f.keys.displayToken,'display'),/cannot access/);
-  assert.equal(f.room.game.rolls,0);
-});
-test('TV sound takes over only on readiness, has one owner, and returns after loss',()=>{
-  const f=fixture();assert.equal(f.rooms.snapshot(f.room).soundOwner,'phone');
-  assert.throws(()=>f.rooms.display(f.room,f.keys.displayToken,{instance:'display-one'}),/readiness/);
-  f.rooms.display(f.room,f.keys.displayToken,{instance:'display-one',ready:true});assert.equal(f.rooms.snapshot(f.room).soundOwner,'display-one');
-  assert.throws(()=>f.rooms.display(f.room,f.keys.displayToken,{instance:'display-two',ready:true}),/Another display/);
-  f.advance(LEASE_MS+1);f.rooms.sweep();assert.equal(f.rooms.snapshot(f.room).soundOwner,'phone');
-  f.rooms.display(f.room,f.keys.displayToken,{instance:'display-two',ready:true});assert.equal(f.rooms.snapshot(f.room).soundOwner,'display-two');
-  f.action({type:'phone-sound'});assert.equal(f.rooms.snapshot(f.room).soundOwner,'phone');
-  assert.throws(()=>f.rooms.display(f.room,f.keys.displayToken,{instance:'display-two',ready:true,renew:true}),/released/);
-});
-test('TV heartbeat and controller refresh preserve current dice, scores and turn',()=>{
-  const f=fixture();f.action({type:'roll'});f.action({type:'score',row:0,column:0});f.action({type:'roll'});const game=structuredClone(f.room.game);
-  f.rooms.display(f.room,f.keys.displayToken,{instance:'display-one',ready:true});f.advance(LEASE_MS-1);f.rooms.display(f.room,f.keys.displayToken,{instance:'display-one',ready:true});
-  f.rooms.authorize(f.room,f.keys.controlToken,'control');assert.deepEqual(f.rooms.snapshot(f.room).game,game);
-  f.advance(LEASE_MS-1);f.rooms.sweep();assert.equal(f.rooms.snapshot(f.room).soundOwner,'display-one');
-});
-test('snapshots, reconnect, repeated events, late audio and other state changes are silent',()=>{
-  const gate=eventGate(), initial={revision:0,serverNow:10000,cue:{id:'old',at:9999}};
-  assert.equal(gate(initial,true,11000),false);
-  const fresh={revision:1,serverNow:10001,cue:{id:'roll',at:10001}};assert.equal(gate(fresh,false,11001),true);assert.equal(gate(fresh,false,11002),false);
-  assert.equal(gate({...fresh,revision:2},false,11003),false);
-  assert.equal(gate({...fresh,revision:3,cue:{id:'late',at:10001}},false,14002),false);
-  assert.equal(gate({...fresh,revision:4,cue:{id:'latest',at:14000}},true,15000),false);
-});
-test('nickname validation and two-hour trial expiry have clear boundaries',()=>{
-  const f=fixture();for(const names of [[],[''],['x'.repeat(25)],Array(7).fill('Player')])assert.throws(()=>f.rooms.create(names));
-  f.advance(ROOM_TTL_MS+1);f.rooms.sweep();assert.throws(()=>f.rooms.get(f.keys.roomId),/expired/);
-});
-test('the unchanged rule engine completes six-player trial games',()=>{
-  const rooms=new TrialRooms({random:()=>0});const keys=rooms.create(['A','B','C','D','E','F']),room=rooms.get(keys.roomId);
-  for(let row=0;row<13;row++)for(let column=0;column<3;column++)for(let player=0;player<6;player++){
-    rooms.action(room,keys.controlToken,{type:'roll',id:`roll-${row}-${column}-${player}`,revision:room.revision});
-    rooms.action(room,keys.controlToken,{type:'score',row,column,confirmZero:true,id:`score-${row}-${column}-${player}`,revision:room.revision});
-  }
-  assert.equal(room.game.done,true);assert.ok(room.game.players.every(p=>p.card.every(row=>row.every(v=>v!==null))));
-});
-test('HTTP assets, credential checks, silent reconnect snapshots and path allowlist',async()=>{
-  const server=createTrialServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-  const base=`http://127.0.0.1:${server.address().port}`;let stream;
-  try{
-    for(const p of ['/','/receiver.html','/viewer.html','/screen.mjs','/controller-state.mjs','/engine.mjs','/sounds/dice-on-felt.wav'])assert.equal((await fetch(base+p)).status,200);
-    for(const p of ['/.git/config','/room.mjs','/server.mjs','/package.json'])assert.equal((await fetch(base+p)).status,404);
-    const keys=await(await fetch(base+'/api/rooms',{method:'POST',body:JSON.stringify({names:['Jim','Terry']})})).json();
-    const path=`/api/rooms/${keys.roomId}`;
-    assert.equal((await fetch(base+path+'/state')).status,403);
-    assert.equal((await fetch(base+path+'/action',{method:'POST',headers:{Authorization:`Bearer ${keys.viewToken}`},body:'{}'})).status,403);
-    assert.equal((await fetch(base+path+'/action',{method:'POST',headers:{Origin:'https://another.example',Authorization:`Bearer ${keys.controlToken}`},body:'{}'})).status,403);
-    stream=await fetch(base+path+'/events?ticket='+keys.viewToken);const reader=stream.body.getReader();const first=await reader.read();assert.match(new TextDecoder().decode(first.value),/^event: snapshot/);await reader.cancel();
-  }finally{await stream?.body?.cancel().catch(()=>{});server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
-});
-
-
-test('full selection masks validate access, turn timing and duplicate commands',()=>{
-  const f=fixture();const selected=[true,false,true,false,true];
-  assert.throws(()=>f.action({type:'select',selected}),/cannot be selected/);
-  f.action({type:'roll'});
-  for(const invalid of [[true],[true,true,true,true,1],'all'])assert.throws(()=>f.action({type:'select',selected:invalid}),/cannot be selected/);
-  for(const key of [f.keys.viewToken,f.keys.displayToken])assert.throws(()=>f.rooms.action(f.room,key,{type:'select',selected,id:'unauthorized',revision:f.room.revision}),/cannot access/);
-  const before=f.room.revision;f.action({type:'select',selected,id:'selection'});assert.deepEqual(f.room.game.selected,selected);assert.equal(f.room.revision,before+1);
-  f.action({type:'select',selected:Array(5).fill(false),id:'selection',revision:before});assert.deepEqual(f.room.game.selected,selected);assert.equal(f.room.revision,before+1);
+import {TrialRooms} from './room.mjs';
+import {createTrialServer} from './server.mjs';
+test('HTTP QR seats, concurrent rounds, permissions and asset boundaries',async t=>{
+ let time=Date.now();const rooms=new TrialRooms({clock:()=>time}),server=createTrialServer({rooms});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+ const origin='http://127.0.0.1:'+server.address().port;
+ const call=(path,{ticket,data,from}={})=>fetch(origin+path,{method:data===undefined?'GET':'POST',headers:{...(ticket?{Authorization:'Bearer '+ticket}:{}),...(from?{Origin:from}:{}),...(data===undefined?{}:{'Content-Type':'application/json'})},...(data===undefined?{}:{body:JSON.stringify(data)})});
+ for(const p of ['/','/join.html','/receiver.html','/display-link.html','/vendor/qr.mjs','/screen.mjs','/engine.mjs','/sounds/dice-on-felt.wav'])assert.equal((await call(p)).status,200,p);
+ for(const p of ['/viewer.html','/.git/config','/room.mjs','/server.mjs','/package.json'])assert.equal((await call(p)).status,404,p);
+ const host=await(await call('/api/rooms',{data:{name:'Host'}})).json(),base='/api/rooms/'+host.roomId;
+ const invitation=await(await call(base+'/invitation',{ticket:host.hostToken})).json();
+ assert.equal((await call(base+'/state',{ticket:invitation.inviteToken})).status,403);
+ const guestResponse=await call(base+'/join',{ticket:invitation.inviteToken,data:{name:'Guest',joinId:crypto.randomUUID()}});
+ assert.equal(guestResponse.status,201);const guest=await guestResponse.json();assert.equal(guest.hostToken,undefined);
+ let state=await(await call(base+'/state',{ticket:guest.playerToken})).json();assert.equal(state.players.length,2);assert.equal(state.players[0].token,undefined);
+ assert.equal((await call(base+'/admin',{ticket:guest.playerToken,data:{id:'bad',type:'start',gameId:state.gameId}})).status,403);
+ assert.equal((await call(base+'/claim',{ticket:guest.playerToken,data:{}})).status,409);
+ assert.equal((await call(base+'/action',{ticket:host.displayToken,data:{type:'roll'}})).status,403);
+ assert.equal((await call(base+'/admin',{ticket:host.hostToken,from:'https://outsider.example',data:{type:'start'}})).status,403);
+ state=await(await call(base+'/admin',{ticket:host.hostToken,data:{id:'start',type:'start',gameId:state.gameId}})).json();
+ const move=(seat,type,extra={})=>call(base+'/action',{ticket:seat.playerToken,data:{id:crypto.randomUUID(),gameId:state.gameId,round:state.round,playerRevision:state.players.find(p=>p.id===seat.playerId).revision,type,...extra}});
+ const rolls=await Promise.all([move(host,'roll'),move(guest,'roll')]);assert.ok(rolls.every(r=>r.status===200));
+ state=await(await call(base+'/state',{ticket:guest.playerToken})).json();assert.ok(state.players.every(p=>p.rolls===1));
+ const scored=await move(host,'score',{row:12,column:0});assert.equal(scored.status,200);state=await scored.json();assert.equal(state.round,1);
+ assert.equal((await move(host,'roll')).status,409);
+ state=await(await move(guest,'score',{row:12,column:0})).json();assert.equal(state.round,2);assert.ok(state.players.every(p=>p.rolls===0));
+ const stream=await call(base+'/events?ticket='+guest.playerToken),reader=stream.body.getReader();assert.match(new TextDecoder().decode((await reader.read()).value),/^event: snapshot/);await reader.cancel();
+ time+=46000;const taken=await call(base+'/claim',{ticket:guest.playerToken,data:{}});assert.equal(taken.status,200);const organizer=await taken.json();assert.equal(organizer.state.hostId,guest.playerId);
+ assert.equal((await call(base+'/admin',{ticket:host.hostToken,data:{id:'remove',type:'remove',gameId:state.gameId,playerId:guest.playerId}})).status,403);
 });

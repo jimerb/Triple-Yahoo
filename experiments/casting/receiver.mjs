@@ -1,20 +1,28 @@
 import { request, subscribe, newId } from './client.mjs';
-import { renderBoard } from './screen.mjs';
+import {renderBoard,roundLabel,roomProgress,updatePresence} from './screen.mjs';
+import {qrSvg,inviteUrl} from './qr.mjs';
 import { TrialSound } from './sound.mjs';
 import { NAMESPACE } from './cast.mjs';
 import { validateAttachment } from './receiver-attachment.mjs';
 const $=s=>document.querySelector(s), sound=new TrialSound(), instance=newId();
-let config, state, disconnect, heartbeat, connected=false, castContext, senderId, shouldClaim=true, ownedSound=false, attachQueue=Promise.resolve();
+let inviteGame='',config, state, disconnect, heartbeat, connected=false, castContext, senderId, shouldClaim=true, ownedSound=false, attachQueue=Promise.resolve();
 const report = (type,message) => { if(castContext&&senderId)castContext.sendCustomMessage(NAMESPACE,senderId,{type,message,roomId:config?.roomId,attempt:config?.attempt}); };
+async function invite(){
+  if(!state||state.phase!=='lobby'){$('#lobby-invite').hidden=true;return;}
+  if(inviteGame===state.gameId)return;inviteGame=state.gameId;
+  try{const data=await request('/api/rooms/'+config.roomId+'/invitation',undefined,config.displayToken);if(state.phase==='lobby'&&data.inviteToken){$('#join-qr').innerHTML=qrSvg(inviteUrl(location.origin,data));$('#lobby-invite').hidden=false;}}catch{inviteGame='';}
+}
+function draw(){if(!state)return;document.body.classList.toggle('lobby',state.phase==='lobby');$('#round-label').textContent=roundLabel(state);$('#round-progress').textContent=roomProgress(state);renderBoard($('#board'),state);updatePresence();void invite();}
+setInterval(updatePresence,2000);
 function labelCast(){
   try{if(!castContext?.isSystemReady())return;
-    castContext.setApplicationState(state&&!state.game.done?'Triple Yahoo · '+state.game.players[state.game.active].name+"'s turn":'Triple Yahoo · Shared board');
+    castContext.setApplicationState(state?'Triple Yahoo · '+roundLabel(state):'Triple Yahoo · Shared board');
   }catch{} // Cast labels must not prevent game updates.
 }
 async function announceReady() {
   if(!config||!connected||!shouldClaim)return;
   const target=config;
-  if(!await sound.ready()){$('#enable-sound').hidden=false;$('#audio-status').textContent='TV sound is not ready. Phone sound stays on.';report('audio-blocked','TV board loaded; phone sound remains on because TV audio is blocked.');return;}
+  if(!await sound.ready()){$('#enable-sound').hidden=false;$('#audio-status').textContent='TV sound is not ready. Room sound stays on its current device.';report('audio-blocked','TV board loaded; room sound remains on its current device because TV audio is blocked.');return;}
   if(!shouldClaim||!connected||config!==target)return;
   try {
     await request(`/api/rooms/${config.roomId}/display`,{instance,ready:true},config.displayToken);
@@ -28,15 +36,15 @@ function attach(packet,sender) {
 async function attachNow(packet,sender) {
   const first=await validateAttachment(config,packet,value=>request(`/api/rooms/${value.roomId}/state`,undefined,value.displayToken));
   disconnect?.();clearInterval(heartbeat);sound.setMuted(true);
-  config=packet;senderId=sender;shouldClaim=true;ownedSound=false;state=first;
-  $('#error').textContent='';renderBoard($('#board'),state);labelCast();
-  report('attached','TV board connected. Phone sound stays on until TV sound is ready.');
-  disconnect=subscribe({roomId:packet.roomId,ticket:packet.displayToken},(next,play)=>{
+  config=packet;inviteGame='';senderId=sender;shouldClaim=true;ownedSound=false;state=first;
+  $('#error').textContent='';draw();labelCast();
+  report('attached','TV board connected. Room sound stays on its current device until TV sound is ready.');
+  disconnect=subscribe({roomId:packet.roomId,ticket:packet.displayToken},(next,cues)=>{
     if(config?.roomId!==packet.roomId)return;
-    if(state&&next.revision<state.revision)return;state=next;renderBoard($('#board'),state,{rolling:play&&next.cue?.type==='roll'});labelCast();
+    if(state&&next.revision<state.revision)return;state=next;draw();labelCast();
     const nowOwns=next.soundOwner===instance;
     if(ownedSound&&!nowOwns){shouldClaim=false;clearInterval(heartbeat);$('#audio-status').textContent='Room sound moved to a phone. This display is quiet.';}
-    ownedSound=nowOwns;sound.setMuted(!nowOwns);if(play&&next.cue)sound.play(next.cue);
+    ownedSound=nowOwns;sound.setMuted(!nowOwns);if(cues?.length)sound.playMany(cues);
   },(ok,message,code)=>{
     if(config?.roomId!==packet.roomId)return;
     connected=ok;$('#connection').textContent=ok?'Following the game':message;

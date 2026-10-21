@@ -55,21 +55,23 @@ export function castFailure(error) {
 // Google may emit a session event without settling its selection promise.
 // Wait for a real session, not just delivery of the launch request.
 export class CastLaunch {
-  constructor({requestSession,getSession,status,recovery=()=>{},timeoutMs=45000}) {
-    Object.assign(this,{requestSession,getSession,status,recovery,timeoutMs});
+  constructor({requestSession,getSession,status,recovery=()=>{},timeoutMs=45000,pollMs=500}) {
+    Object.assign(this,{requestSession,getSession,status,recovery,timeoutMs,pollMs});
     this.pending=null;this.needsReset=false;
   }
   start() {
-    const current=this.getSession();if(current)return Promise.resolve(current);
+    const current=this.getSession();if(this.connected(current))return Promise.resolve(current);
     if(this.pending)return this.pending.promise;
     if(this.needsReset)return Promise.reject(this.timeoutError());
     const pending={phase:'choosing'};
     pending.promise=new Promise((resolve,reject)=>{pending.finish=(error,session)=>{
       if(this.pending!==pending)return;
-      clearTimeout(pending.timer);this.pending=null;error?reject(error):resolve(session);
+      clearTimeout(pending.timer);clearInterval(pending.poll);this.pending=null;error?reject(error):resolve(session);
     };});
     this.pending=pending;this.recovery(false);
     this.status('Choose your TV in the casting list.');this.arm(pending);
+    // Some Android SDK versions lose the event while the native chooser is open.
+    pending.poll=setInterval(()=>{if(this.pending===pending)this.started(this.getSession());},this.pollMs);
     // Call synchronously within the button tap to preserve browser user activation.
     try{Promise.resolve(this.requestSession()).then(()=>{
       if(this.pending!==pending)return;
@@ -84,24 +86,31 @@ export class CastLaunch {
     },this.timeoutMs);
   }
   timeoutError() {
-    return Object.assign(Error('Google did not finish connecting to the TV (launch_timeout). Tap Reset TV connection, then try Show on TV again. Your game stays here.'),{code:'launch_timeout'});
+    const selected=this.pending?.phase==='starting';
+    return Object.assign(Error(selected?'Google could not launch the TV app (launch_timeout). Reset TV connection stops the old session before trying again. If this repeats, the Chromecast must be enabled for the registered trial receiver; starting a new game will not fix that.':'Google did not finish TV selection (launch_timeout). Open this page in Chrome using the browser menu, then try Show on TV. Your game stays here.'),{code:'launch_timeout'});
   }
   starting() {
     if(!this.pending||this.pending.phase==='starting')return;
     this.pending.phase='starting';this.status('TV selected. Starting Triple Yahoo on the TV…');this.arm(this.pending);
   }
   started(session) {
-    if(!session)return false;
+    if(!this.connected(session))return false;
     this.needsReset=false;this.recovery(false);
     const pending=this.pending;pending?.finish(null,session);return !!pending;
   }
-  failed(error) {const pending=this.pending;pending?.finish(error);return !!pending;}
+  connected(session) {return !!session&&(!session.getSessionState||['SESSION_STARTED','SESSION_RESUMED'].includes(session.getSessionState()));}
+  failed(error) {this.needsReset=false;const pending=this.pending;pending?.finish(error);return !!pending;}
   cancel() {this.failed(Object.assign(Error('TV connection stopped.'),{code:'stopped'}));}
 }
 
 export function reloadTvConnection(storage,reload) {
   try{storage.setItem('ty-cast-fresh-start','1');}catch{}
   reload();
+}
+
+export async function resetTvConnection({stop,storage,reload,onStopFailure=()=>{}}) {
+  try{await stop();}catch(error){onStopFailure(error);}
+  reloadTvConnection(storage,reload);
 }
 
 export function useFreshTvConnection(storage) {
